@@ -1,0 +1,7 @@
+# Ignore Visual Studio Solution Files
+*.pyproj
+*.sln
+*.suo
+
+# Other files/folders
+/__pycache__
