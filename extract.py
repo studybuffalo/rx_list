@@ -53,7 +53,7 @@
 
 
 from urllib import robotparser
-import ConfigParser
+import configparser
 import os
 import datetime
 import codecs
@@ -62,6 +62,7 @@ from requests import Session
 import json
 from bs4 import BeautifulSoup
 import time
+from unipath import Path
 
 
 def progress_bar(title, curPos, start, stop):
@@ -85,19 +86,22 @@ def progress_bar(title, curPos, start, stop):
         progComp = "#" * 50
         print("%s [%s] Complete!" % (title, progComp))
 
-
-def get_permission(robotTxt, url):
+def get_permission(robotTxt, url, agent):
     """Checks the specified robot.txt file for access permission."""
     robot = robotparser.RobotFileParser()
-    robot.set_url(robotFile)
+    robot.set_url(robotTxt)
     robot.read()
-    
-    can_crawl = robot.can_fetch(
-		"Study Buffalo Data Extraction (http://www.studybuffalo.com/dataextraction/)",
-		url)
+
+    can_crawl = robot.can_fetch(agent, url)
     
     return can_crawl
 
+def generate_session(url, user):
+    """Create session with pharmacists.ab.ca"""
+    session = Session()
+    session.head(url, headers={"user-agent": user})
+    
+    return session
 
 def acp_ajax_request(session, post_data):
     """Creates AJAX request with ACP website to return requested data"""
@@ -117,7 +121,6 @@ def acp_ajax_request(session, post_data):
     rows = soup.select("table.table-striped tbody tr")
     
     return rows
-
 
 def extract_pharmacist_data(row):
     """Extracts pharmacist details from the table row"""
@@ -141,6 +144,47 @@ def extract_pharmacist_data(row):
         "restrictions": restrictions
     }
 
+def request_pharmacist_data(ses, crawlDelay):
+    """Requests pharmacist data from the ACP website"""
+    data = []
+
+    print ("Extracting pharmacist data...")
+
+    start = 0
+    end = 1602
+    length = end - start
+    step = 1
+    pharmacist_list = []
+
+    for i in range (start, end + 1):
+        # Create POST data for retrieving pharmacist information
+        page_num = str(i)
+        post_data = {
+	        "view_name": "_acp_advance_filter",
+	        "view_display_id": "block_3",
+	        "page": ("0,0,0,0,0,0,%s" % page_num)
+        }
+
+	    # Processes AJAX response and collects list of pharmacists
+        try:
+            page_data = acp_ajax_request(ses, post_data)
+
+            for row in page_data:
+                data.append(extract_pharmacist_data(row))
+        except:
+            data.append({
+			    "pharmacist": ("Error with page %s" % str(i +1)),
+			    "location": "",
+			    "registration": "",
+			    "authorizations": "",
+			    "restrictions": ""})
+
+	    # Progress Bar
+
+	    # Pause request to comply with robots.txt crawl-delay
+        time.sleep(crawlDelay)
+
+    return data
 
 def extract_pharmacy_data(row):
     """Extracts pharmacy details from the table row"""
@@ -187,194 +231,153 @@ def extract_pharmacy_data(row):
         "fax": fax
     }
 
-print ("Alberta Pharmacist and Pharmacy Scraper")
-print ("---------------------------------------")
+def request_pharmacy_data(ses, crawlDelay):
+    data = []
+    
+    print ("Extracting pharmacy data...")
 
+    start = 0
+    end = 236
+    length = end - start
+    step = 1
+    pharmacy_list = []
+
+    for i in range (start, end + 1):
+        # Create POST data for retrieving pharmacy information
+        page_num = str(i)
+        post_data = {
+	        "view_name": "_acp_advance_filter",
+	        "view_display_id": "block",
+	        "page": ("0,%s" % page_num)
+        }
+
+	    # Processes AJAX response and collects list of pharmacies
+        try:
+            page_data = acp_ajax_request(session, post_data)
+
+            for row in page_data:
+                data.append(extract_pharmacy_data(row))
+        except:
+            data.append({
+                "pharmacy": ("Error with page %s" % str(i +1)),
+                "manager": "",
+                "address": "",
+                "city": "",
+                "postal": "",
+                "phone": "",
+                "fax": ""})
+
+        # Progress Bar
+        step = progress_bar("Screening", i - start, length, step)
+
+        # Pause request to comply with robots.txt crawl-delay
+        time.sleep(crawlDelay)
+
+    print("Extraction complete!\n\n")
+    
+    return data
+
+def generate_extract_folder(root):
+    """Creates the folders for holding the extracted files"""
+
+    print ("Creating extract folder... ", end="")
+    extractLoc = root.child("extracts")
+
+    if not extractLoc.exists():
+        os.mkdir(extractLoc.absolute())
+    
+    print ("Complete!")
+
+    return {"root": root, "eLoc": extractLoc, "pLoc": parseLoc}
+
+def save_data(root, pharmacist, pharmacy):
+    # Get the date
+    today = datetime.date.today()
+    year = today.year
+    month = "%02d" % today.month
+    day = "%02d" % today.day
+    date = "%s-%s-%s" % (year, month, day)
+
+def upload_data(root, pharmacist, pharmacy):
+    """Upload data to MySQL Database"""
+    # Obtain database credentials
+    cLoc = root.parent.child("config", "python_config.cfg").absolute()
+    
+    config = configparser.ConfigParser()
+    config.read(cLoc)
+
+    db = config.get("mysql_db_rx", "db")
+    host = config.get("mysql_db_rx", "host")
+    user = config.get("mysql_user_rx_ent", "user")
+    pw = config.get("mysql_user_rx_ent", "password")
+
+    # Connect to database
+    print ("Connecting to database... ", end="")
+    
+    conn = pymysql.connect(host, user, pw, db)
+    cursor = conn.cursor()
+
+    print ("Complete!\n")
+    
+    print ("Uploading pharmacist data... ", end="")
+
+    print ("Complete!")
+
+    print ("Uploading pharmacy data... ", end="")
+
+    print ("Complete!\n")
+
+    conn.close()
+
+# SET UP VARIABLES
+# Sets script directory to allow absolute path naming (for Cron job)
+# Ubuntu Path
+# root = Path("/", "home", "joshua", "scripts", "dpd_data_extraction")
+# Windows Path
+root = Path("C:\\", "Users", "Joshua", "Desktop", "GitHub", "rx_list")
+
+robotName = (
+    "Study Buffalo Data Extraction ("
+    "http://www.studybuffalo.com/dataextraction/)"
+)
+
+print ("\nALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL")
+print ("-----------------------------------------------")
 
 # Checks ACP for permission to crawl web page
-print ("Checking robot.txt for permission to crawl...")
+print ("Checking robot.txt for permission... ", end="")
 
 can_crawl = get_permission(
     "https://pharmacists.ab.ca/robots.txt", 
-    "https://pharmacists.ab.ca/views/"
+    "https://pharmacists.ab.ca/views/",
+    robotName
 )
 
-# FIGURE OUT CRAWL DELAY
+crawl_delay = 10 # as per robots.txt on 2017-02-25
 
-"""
-# Kills script if permission rejected
-if can_crawl == False:
-	sys.exit()
+if can_crawl == True:
+    print ("Granted!\n")
+
+    # Extract data from website
+    print ("EXTRACT DATA")
+    print ("------------")
+
+    # Generate session with ACP website
+    session = generate_session("https://pharmacists.ab.ca", robotName)
+
+    # Extract Pharmacist Data
+    pharmacistDat = extract_pharmacist_data(session)
+
+    # Extract Pharmacy Data
+    pharmacyData = extract_pharmacy_data(session)
+    
+    # Generate directory to save files to
+    print ("SAVE EXTRACTED DATA")
+    print ("-------------------")
+
+    print ("UPLOAD EXTRACTED DATA")
+    print ("---------------------")
+
+    upload_data(root, pharmacistData, pharmacyData)
 else:
-	print ("Permission Granted!\n")
-
-
-'''Generates/Accesses file for saving .csv files'''
-# Determine script directory
-scriptDir = os.path.dirname(os.path.abspath(__file__))
-
-# Generates today's date for saving and extracting files
-today = datetime.date.today()
-year = today.year
-month = "%02d" % today.month
-day = "%02d" % today.day
-date = "%s-%s-%s" % (year, month, day)
-
-# Creates folder for extracted data if necessary
-save_location = os.path.join(scriptDir, "Extracted_Data", date)
-save_location = os.path.normpath(save_location)
-
-if not os.path.exists(save_location):
-	os.mkdir(save_location)
-
-# Opens csv files to save extracted data
-pharmacist_file_path = os.path.join(save_location, "pharmacists.csv")
-pharmacist_file_path = os.path.normpath(pharmacist_file_path)
-pharmacist_file = codecs.open(pharmacist_file_path, 'w', encoding='utf-8')
-
-pharmacy_file_path = os.path.join(save_location, "pharmacies.csv")
-pharmacy_file_path = os.path.normpath(pharmacy_file_path)
-pharmacy_file = codecs.open(pharmacy_file_path, 'w', encoding='utf-8')
-
-
-'''Connects to config file to grab MySQL credentials'''
-config = ConfigParser.ConfigParser()
-config.read('../../config/python_config.cfg')
-
-
-'''Connect to MySQL database'''
-mysql_user = config.get('mysql_user_sb_acp_ent', 'user')
-mysql_password = config.get('mysql_user_sb_acp_ent', 'password')
-mysql_db = config.get('mysql_db_sb_acp', 'db')
-mysql_host = config.get('mysql_db_sb_acp', 'host')
-
-'''
-conn = MySQLdb.connect(user = mysql_user,
-						passwd = mysql_password,
-						db = mysql_db, 
-						host = mysql_host,
-						charset='utf8',
-						use_unicode=True)
-cursor = conn.cursor()
-'''
-
-
-'''Create session with pharmacists.ab.ca'''
-session = Session()
-session.head("https://pharmacists.ab.ca")
-
-
-'''Extract Pharmacist Data'''
-print ("Extracting pharmacist data...")
-
-start = 0
-end = 1602
-length = end - start
-step = 1
-pharmacist_list = []
-
-for i in range (start, end + 1):
-	# Create POST data for retrieving pharmacist information
-	page_num = str(i)
-	post_data = {
-		"view_name": "_acp_advance_filter",
-		"view_display_id": "block_3",
-		"page": ("0,0,0,0,0,0,%s" % page_num)
-	}
-
-	# Processes AJAX response and collects list of pharmacists
-	try:
-		page_data = acp_ajax_request(session, post_data)
-
-		for row in page_data:
-			pharmacist_list.append(extract_pharmacist_data(row))
-	except:
-		pharmacist_list.append({
-			"pharmacist": ("Error with page %s" % str(i +1)),
-			"location": "",
-			"registration": "",
-			"authorizations": "",
-			"restrictions": ""})
-
-	# Progress Bar
-	step = progress_bar("Screening", i - start, length, step)
-	
-	# Pause request to comply with robots.txt crawl-delay
-	time.sleep(crawl_delay)
-
-print("Extraction complete!\n\n")
-
-
-'''Saving pharmacist data to MySQL and .csv'''
-# Create header row for csv file
-pharmacist_file.write(('"%s","%s","%s","%s","%s"\n') % 
-						("Pharmacist Name", "Pharmacy of Employment", 
-						"Registration Type", "Authorizations", 
-						"Practice Restrictions/Conditions"))
-
-for item in pharmacist_list:
-	pharmacist_file.write(('"%s","%s","%s","%s","%s"\n') % 
-						  (item['pharmacist'], item['location'],
-						   item['registration'], item['authorizations'], 
-						   item['restrictions']))
-
-# Upload to database here
-
-
-'''Extracting pharmacy data'''
-print ("Extracting pharmacy data...")
-
-start = 0
-end = 236
-length = end - start
-step = 1
-pharmacy_list = []
-
-for i in range (start, end + 1):
-	# Create POST data for retrieving pharmacy information
-	page_num = str(i)
-	post_data = {
-		"view_name": "_acp_advance_filter",
-		"view_display_id": "block",
-		"page": ("0,%s" % page_num)
-	}
-
-	# Processes AJAX response and collects list of pharmacies
-	try:
-		page_data = acp_ajax_request(session, post_data)
-
-		for row in page_data:
-			pharmacy_list.append(extract_pharmacy_data(row))
-	except:
-		pharmacy_list.append({
-			"pharmacy": ("Error with page %s" % str(i +1)),
-			"manager": "",
-			"address": "",
-			"city": "",
-			"postal": "",
-			"phone": "",
-			"fax": ""})
-
-	# Progress Bar
-	step = progress_bar("Screening", i - start, length, step)
-
-	# Pause request to comply with robots.txt crawl-delay
-	time.sleep(crawl_delay)
-
-print("Extraction complete!\n\n")
-
-
-'''Saving pharmacy data to MySQL and .csv'''
-# Create header row for csv file
-pharmacy_file.write(('"%s","%s","%s","%s","%s","%s","%s"\n') % 
-					("Pharmacy Name", "Pharmacy Manager", "Address", 
-					 "City", "Postal Code", "Phone Number", "Fax Number"))
-
-for item in pharmacy_list:
-	pharmacy_file.write(('"%s","%s","%s","%s","%s","%s","%s"\n') % 
-						(item['pharmacy'], item['manager'], item['address'], 
-						 item['city'], item['postal'], item['phone'], 
-						 item['fax']))
-
-#Upload to database here
-"""
+   print ("Rejected.")
