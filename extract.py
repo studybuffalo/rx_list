@@ -1,158 +1,207 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
-'''Extracts and saves pharmacist and pharmacy data from the ACP website
-
-  Last Update: 2016-June-06
-
-  Copyright (c) Notices
-	2016	Joshua R. Torrance	<studybuffalo@studybuffalo.com>
+"""Extracts and saves pharmacist and pharmacy data from the ACP website
+    Last Update: 2017-Feb-25
+    Copyright (c) Notices
+	    2017	Joshua R. Torrance	<studybuffalo@studybuffalo.com>
 	
-  This software may be used in any medium or format and adapated to
-  any purpose under the following terms:
-    - You must give appropriate credit, provide a link to the
-      license, and indicate if changes were made. You may do so in
-      any reasonable manner, but not in any way that suggests the
-      licensor endorses you or your use.
-    - You may not use the material for commercial purposes.
-    - If you remix, transform, or build upon the material, you must 
-      distribute your contributions under the same license as the 
-      original.
-	
-  Alternative uses may be discussed on an individual, case-by-case 
-  basis by contacting one of the noted copyright holders.
+    This program is free software: you can redistribute it and/or 
+    modify it under the terms of the GNU General Public License as 
+    published by the Free Software Foundation, either version 3 of the 
+    License, or (at your option) any later version.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, 
+    see <http://www.gnu.org/licenses/>.
+    SHOULD YOU REQUIRE ANY EXCEPTIONS TO THIS LICENSE, PLEASE CONTACT 
+    THE COPYRIGHT HOLDERS.
+"""
 
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
-  OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
-  HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
-  WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-  OTHER DEALINGS IN THE SOFTWARE.
-'''
+"""
+    STYLE RULES FOR THIS PROGRAM
+    Style follows the Python Style Guide (PEP 8) where possible. The 
+    following are common standards for reference
+    
+    COMMENT LINES to max of 72 characters
+    PROGRAM LINES to a max of 79 characters
+    
+    INDENTATION 4 spaces
+    STRINGS use quotation marks
+    VARIABLES use camelCase
+    GLOBAL VARIABLES use lowercase with underscores
+    CLASSES use CapWords
+    CONSTANTS use UPPERCASE
+    FUNCTIONS use lowercase with underscores
+    MODULES use lowercase with underscores
+    
+    ALIGNMENT
+        If possible, align with open delminter
+        If not possible, indent
+        If one indent would align arguments with code in block, use 
+            two indents to provide visual differentiation
+        Operators should occur at start of line in broken up lines, 
+        not at the end of the preceding line
+    OPERATORS & SPACING
+    Use spacing in equations
+        e.g. 1 + 1 = 2
+    Do not use spacing in assigning arguments in functions 
+        e.g. def foo(bar=1):
+"""
 
 
+from urllib import robotparser
+import ConfigParser
 import os
 import datetime
-from reppy.cache import RobotsCache
 import codecs
 import sys
-import ConfigParser
 from requests import Session
 import json
 from bs4 import BeautifulSoup
 import time
 
 
-'''Generates a 50 part progress bar with custom text'''
-def progress_bar(title, num, denom, n):
-	'''Generates progress bar in console.'''
-	percent = 100.00 * num / denom
-	
-	if percent != 100:
-		print("%s [%s%s] %.2f%%  \r" % 
-			  (title, (n - 1) * "#", (51 - n) * " ", percent)),
-		sys.stdout.flush()
-		
-		n = n + 1 if percent > n * 2 else n
-		
-		return n
-	else:
-		print("%s [%s] Complete!" % (title, "#" * 50))
+def progress_bar(title, curPos, start, stop):
+    """Generates progress bar in console."""
+    
+    # Normalize start, stop, curPos
+    curPos = (curPos - start) + 1
+    stop = (stop - start) + 1 
+    start = 1
 
-'''Creates AJAX request with the ACP website and returns the requested data'''
+    # Determine current progress
+    prog = 100.00 * (curPos / stop)
+    
+    if prog != 100:
+        progComp = "#" * math.floor(prog / 2)
+        progRem = " " * (50 - math.floor(prog / 2))
+        prog = "%.2f%%" % prog
+        print (("%s [%s%s] %s  \r" % (title, progComp, progRem, prog)), end="")
+        sys.stdout.flush()
+    else:
+        progComp = "#" * 50
+        print("%s [%s] Complete!" % (title, progComp))
+
+
+def get_permission(robotTxt, url):
+    """Checks the specified robot.txt file for access permission."""
+    robot = robotparser.RobotFileParser()
+    robot.set_url(robotFile)
+    robot.read()
+    
+    can_crawl = robot.can_fetch(
+		"Study Buffalo Data Extraction (http://www.studybuffalo.com/dataextraction/)",
+		url)
+    
+    return can_crawl
+
+
 def acp_ajax_request(session, post_data):
-	response = session.post(
-		url = "https://pharmacists.ab.ca/views/ajax",
-		data= post_data,
-		headers={
-			'Referer': 'https://pharmacists.ab.ca'
-		}
-	)
+    """Creates AJAX request with ACP website to return requested data"""
+    response = session.post(
+        url = "https://pharmacists.ab.ca/views/ajax",
+        data = post_data,
+        headers = {
+            'Referer': 'https://pharmacists.ab.ca'
+        }
+    )
+    
+    json_response = json.loads(response.text)
+    json_response = json_response[1]['data']
+    json_response = json_response.encode('utf8')
+    
+    soup = BeautifulSoup(json_response, 'lxml')
+    rows = soup.select("table.table-striped tbody tr")
+    
+    return rows
 
-	json_response = json.loads(response.text)
-	json_response = json_response[1]['data']
-	json_response = json_response.encode('utf8')
 
-	
-	soup = BeautifulSoup(json_response, 'lxml')
-	rows = soup.select("table.table-striped tbody tr")
-	
-	return rows
-
-'''Extracts pharmacist details from a table row'''
 def extract_pharmacist_data(row):
-	cells = row.find_all("td")
-	pharmacist = cells[0].renderContents().strip()
-	location = ""
-	location_strings = cells[1].strings
-	for string in location_strings:
-		location += string.strip() + "\n"
-	registration = cells[2].renderContents().strip()
-	authorizations = cells[3].renderContents().strip()
-	restrictions = cells[4].renderContents().decode('utf8').strip()
+    """Extracts pharmacist details from the table row"""
+    cells = row.find_all("td")
+    pharmacist = cells[0].renderContents().strip()
+    location = ""
+    location_strings = cells[1].strings
+    
+    for string in location_strings:
+        location += string.strip() + "\n"
 
-	return {"pharmacist": pharmacist,
-			"location": location,
-			"registration": registration,
-			"authorizations": authorizations,
-			"restrictions": restrictions}
+    registration = cells[2].renderContents().strip()
+    authorizations = cells[3].renderContents().strip()
+    restrictions = cells[4].renderContents().decode('utf8').strip()
 
-'''Extracts pharmacy details from a table row'''
+    return {
+        "pharmacist": pharmacist,
+        "location": location,
+        "registration": registration,
+        "authorizations": authorizations,
+        "restrictions": restrictions
+    }
+
+
 def extract_pharmacy_data(row):
-	cells = row.find_all("td")
-	pharmacy = cells[0].renderContents().strip()
-	manager = cells[1].renderContents().strip()
-	location_contact = []
+    """Extracts pharmacy details from the table row"""
+    cells = row.find_all("td")
+    pharmacy = cells[0].renderContents().strip()
+    manager = cells[1].renderContents().strip()
+    location_contact = []
 
-	for line in cells[2].strings:
-		location_contact.append(line.strip())
+    for line in cells[2].strings:
+        location_contact.append(line.strip())
 
-	try:
-		temp_address = location_contact[0].strip()
+    try:
+        temp_address = location_contact[0].strip()
 
-		comma_pos = temp_address.rfind(",")
-		postal = temp_address[comma_pos + 2:]
-		temp_address = temp_address[0:comma_pos - 1]
+        comma_pos = temp_address.rfind(",")
+        postal = temp_address[comma_pos + 2:]
+        temp_address = temp_address[0:comma_pos - 1]
 
-		comma_pos = temp_address.rfind(",")
-		city = temp_address[comma_pos + 2:]
-		address = temp_address[0:comma_pos]
-	except:
-		address = ""
-		city = ""
-		postal = ""
+        comma_pos = temp_address.rfind(",")
+        city = temp_address[comma_pos + 2:]
+        address = temp_address[0:comma_pos]
+    except:
+        address = ""
+        city = ""
+        postal = ""
 
-	try:
-		phone = location_contact[5].strip()
-	except:
-		phone = ""
+    try:
+        phone = location_contact[5].strip()
+    except:
+        phone = ""
 
-	try:
-		fax = location_contact[8].strip()
-	except:
-		fax = ""
+    try:
+        fax = location_contact[8].strip()
+    except:
+        fax = ""
 
-	return {"pharmacy": pharmacy,
-			"manager": manager,
-			"address": address,
-			"city": city,
-			"postal": postal,
-			"phone": phone,
-			"fax": fax}
+    return {
+        "pharmacy": pharmacy,
+        "manager": manager,
+        "address": address,
+        "city": city,
+        "postal": postal,
+        "phone": phone,
+        "fax": fax
+    }
 
-print("Alberta Pharmacist and Pharmacy Scraper")
-print("---------------------------------------")
+print ("Alberta Pharmacist and Pharmacy Scraper")
+print ("---------------------------------------")
 
 
-'''Checks ACP for permission to crawl web page'''
-print("Checking robot.txt for permission to crawl...")
+# Checks ACP for permission to crawl web page
+print ("Checking robot.txt for permission to crawl...")
 
-robot = RobotsCache()
-can_crawl = robot.allowed("https://pharmacists.ab.ca", "Study Buffalo Data Extraction(http://www.studybuffalo.com/dataextraction)")
-crawl_delay = robot.delay("https://pharmacists.ab.ca", "Study Buffalo Data Extraction(http://www.studybuffalo.com/dataextraction)")
+can_crawl = get_permission(
+    "https://pharmacists.ab.ca/robots.txt", 
+    "https://pharmacists.ab.ca/views/"
+)
 
+# FIGURE OUT CRAWL DELAY
+
+"""
 # Kills script if permission rejected
 if can_crawl == False:
 	sys.exit()
@@ -328,3 +377,4 @@ for item in pharmacy_list:
 						 item['fax']))
 
 #Upload to database here
+"""
