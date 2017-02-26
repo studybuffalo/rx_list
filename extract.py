@@ -128,21 +128,30 @@ def progress_bar(title, curPos, start, stop):
         progComp = "#" * 50
         print("%s [%s] Complete!" % (title, progComp))
 
-def get_permission(robotTxt, url, agent):
+def get_permission(agent):
     """Checks the specified robot.txt file for access permission."""
+    txtUrl = "https://pharmacists.ab.ca/robots.txt"
+    reqUrl = "https://pharmacists.ab.ca/views/"
+
     robot = robotparser.RobotFileParser()
-    robot.set_url(robotTxt)
+    robot.set_url(txtUrl)
     robot.read()
 
-    can_crawl = robot.can_fetch(agent, url)
+    can_crawl = robot.can_fetch(agent, reqUrl)
     
     return can_crawl
 
-def generate_session(url, user):
+def generate_session(user):
     """Create session with pharmacists.ab.ca"""
-    session = Session()
-    session.head(url, headers={"user-agent": user})
-    
+    url = "https://pharmacisdts.ab.ca"
+
+    try:
+        session = Session()
+        session.head(url, headers={"user-agent": user})
+    except Exception as e:
+        log.critical(e)
+        session = None
+        
     return session
 
 def acp_ajax_request(session, post_data):
@@ -372,9 +381,6 @@ def upload_data(root, pharmacist, pharmacy):
     conn.close()
 
 
-print ("\nALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL")
-print ("-----------------------------------------------")
-
 # SET UP VARIABLES
 # Get the public config file and set the root directory
 pubConfig = configparser.ConfigParser()
@@ -385,34 +391,35 @@ root = Path(pubConfig.get("rx_list", "root"))
 configLoc = root.parent.child("config", "python_config.cfg").absolute()
 privConfig = configparser.ConfigParser().read(configLoc)
 
+# Set up logging functions
 log = logging.getLogger(__name__)
 set_log_properties(pubConfig)
 
+# Get the program/robot/crawler name
 robotName = pubConfig.get("rx_list", "user_agent")
 
-# Checks ACP for permission to crawl web page
-print ("Checking robot.txt for permission... ", end="")
+# PROGRAM START
+log.info("ALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL STARTED")
 
-can_crawl = get_permission(
-    "https://pharmacists.ab.ca/robots.txt", 
-    "https://pharmacists.ab.ca/views/",
-    robotName
-)
+# Checks ACP for permission to crawl web page
+log.info("Checking robot.txt for permission to crawl")
+
+can_crawl = get_permission(robotName)
 
 crawlDelay = 10 # as per robots.txt on 2017-02-25
 
 if can_crawl == True:
-    print ("Granted!\n")
+    log.info("Permission to crawl granted")
 
-    # Extract data from website
-    print ("EXTRACT DATA")
-    print ("------------")
-
+    # EXTRACT DATA FROM WEBSITE
     # Generate session with ACP website
-    session = generate_session("https://pharmacists.ab.ca", robotName)
+    log.debug("Generating session with ACP website")
+
+    session = generate_session(robotName)
     
     # Extract Pharmacist Data
-    pharmacistData = extract_pharmacist_data(session)
+    if session:
+        pharmacistData = extract_pharmacist_data(session)
     """
     # Extract Pharmacy Data
     pharmacyData = extract_pharmacy_data(session)
@@ -430,3 +437,5 @@ if can_crawl == True:
     """
 else:
    print ("Rejected.")
+
+log.info("ALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL STARTED")
