@@ -52,6 +52,7 @@
 """
 
 
+import logging
 from urllib import robotparser
 import configparser
 import os
@@ -64,6 +65,47 @@ from bs4 import BeautifulSoup
 import time
 from unipath import Path
 
+def get_today():
+     # Get the date
+    today = datetime.date.today()
+    year = today.year
+    month = "%02d" % today.month
+    day = "%02d" % today.day
+    date = "%s-%s-%s" % (year, month, day)
+
+    return date
+
+def set_log_properties(conf):
+    logLoc = conf.get("rx_list", "log_loc")
+    logDebug = True if conf.get("rx_list", "log_debug") == "True" else False
+    
+    # File Handler Settings
+    date = get_today()
+    logName = root.child(logLoc, "%s.log" % date).absolute()
+    lhFormat = ""
+    
+    lh = logging.FileHandler(logName, "a")
+    lh.setFormatter(lhFormat)
+
+    # Console Handler Settings
+    chFormat = logging.Formatter("%(message)s")
+        
+    ch = logging.StreamHandler()
+
+    ch.setFormatter(chFormat)
+    
+    log.addHandler(ch)
+
+    # Set levels to debug if logDebug == True
+    if logDebug:
+        lh.setLevel(logging.DEBUG)
+        ch.setLevel(logging.DEBUG)
+    else:
+        lh.setLevel(logging.INFO)
+        ch.setLevel(logging.CRITICAL)
+    
+    log.addHandler(lh)
+    log.addHandler(ch)
 
 def progress_bar(title, curPos, start, stop):
     """Generates progress bar in console."""
@@ -329,20 +371,24 @@ def upload_data(root, pharmacist, pharmacy):
 
     conn.close()
 
-# SET UP VARIABLES
-# Sets script directory to allow absolute path naming (for Cron job)
-# Ubuntu Path
-# root = Path("/", "home", "joshua", "scripts", "dpd_data_extraction")
-# Windows Path
-root = Path("C:\\", "Users", "Joshua", "Desktop", "GitHub", "rx_list")
-
-robotName = (
-    "Study Buffalo Data Extraction ("
-    "http://www.studybuffalo.com/dataextraction/)"
-)
 
 print ("\nALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL")
 print ("-----------------------------------------------")
+
+# SET UP VARIABLES
+# Get the public config file and set the root directory
+pubConfig = configparser.ConfigParser()
+pubConfig.read("config.cfg")
+root = Path(pubConfig.get("rx_list", "root"))
+
+# Get the private config file
+configLoc = root.parent.child("config", "python_config.cfg").absolute()
+privConfig = configparser.ConfigParser().read(configLoc)
+
+log = logging.getLogger(__name__)
+set_log_properties(pubConfig)
+
+robotName = pubConfig.get("rx_list", "user_agent")
 
 # Checks ACP for permission to crawl web page
 print ("Checking robot.txt for permission... ", end="")
@@ -353,7 +399,7 @@ can_crawl = get_permission(
     robotName
 )
 
-crawl_delay = 10 # as per robots.txt on 2017-02-25
+crawlDelay = 10 # as per robots.txt on 2017-02-25
 
 if can_crawl == True:
     print ("Granted!\n")
@@ -364,10 +410,10 @@ if can_crawl == True:
 
     # Generate session with ACP website
     session = generate_session("https://pharmacists.ab.ca", robotName)
-
+    
     # Extract Pharmacist Data
-    pharmacistDat = extract_pharmacist_data(session)
-
+    pharmacistData = extract_pharmacist_data(session)
+    """
     # Extract Pharmacy Data
     pharmacyData = extract_pharmacy_data(session)
     
@@ -375,9 +421,12 @@ if can_crawl == True:
     print ("SAVE EXTRACTED DATA")
     print ("-------------------")
 
+    save_data(root, pharmacistData, pharmacyData)
+
     print ("UPLOAD EXTRACTED DATA")
     print ("---------------------")
 
     upload_data(root, pharmacistData, pharmacyData)
+    """
 else:
    print ("Rejected.")
