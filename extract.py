@@ -51,18 +51,16 @@
         e.g. def foo(bar=1):
 """
 
-
+from unipath import Path
 import configparser
 import logging
 from urllib import robotparser
-
 import os
 import datetime
 from requests import Session
 import json
 from bs4 import BeautifulSoup
 import time
-from unipath import Path
 
 def get_today():
      # Get the date
@@ -146,7 +144,7 @@ def acp_ajax_request(session, post_data):
     # Returns the data in JSON format
     json_response = json.loads(response.text)
     json_response = json_response[1]['data']
-    json_response = json_response.encode('utf8')
+    #json_response = json_response.encode('utf8')
     
     # Extracts out just the table rows containing data
     soup = BeautifulSoup(json_response, 'lxml')
@@ -156,17 +154,30 @@ def acp_ajax_request(session, post_data):
 
 def extract_pharmacist_data(row):
     """Extracts pharmacist details from the table row"""
+    # Data is contained within the table cells
     cells = row.find_all("td")
+
+    # Pharmacist Name
     pharmacist = cells[0].renderContents().strip()
+
+    # Location Data
     location = ""
     location_strings = cells[1].strings
     
     for string in location_strings:
         location += string.strip() + "\n"
+    
+    location = location.replace("View the Map\n", "")
+    location = location.strip()
 
+    # Registration Status
     registration = cells[2].renderContents().strip()
+
+    # Authorizations
     authorizations = cells[3].renderContents().strip()
-    restrictions = cells[4].renderContents().decode('utf8').strip()
+
+    # Restrictions
+    restrictions = cells[4].renderContents().strip()
 
     return {
         "pharmacist": pharmacist,
@@ -182,20 +193,19 @@ def request_pharmacist_data(ses, crawlDelay):
 
     log.info("STARTING PHARMACIST DATA EXTRACTION")
 
-    i = 1600
+    i = 1640
     stop = 0
 
     # Loop until 5 blank requests (signalling data end or repeated errors)
-    while stop < 5:
+    while stop < 1:
 	    # Pause request to comply with robots.txt crawl-delay
         time.sleep(crawlDelay)
 
         # Create POST data for retrieving pharmacist information
-        page_num = str(i)
         post_data = {
 	        "view_name": "_acp_advance_filter",
 	        "view_display_id": "block_3",
-	        "page": ("0,0,0,0,0,0,%s" % page_num)
+	        "page": ("0,0,0,0,0,0,%s" % i)
         }
 
 	    # Processes AJAX response and retrieve response
@@ -219,42 +229,70 @@ def request_pharmacist_data(ses, crawlDelay):
                 log.warn("Error processing page %s request: %s" % (i, e))
 
         i = i + 1
+    
+    log.info("PHARMACIST DATA EXTRACTION COMPLETE")
+
     return data
 
 def extract_pharmacy_data(row):
     """Extracts pharmacy details from the table row"""
+    # Data is contained within the table cells
     cells = row.find_all("td")
+
+    # Pharmacy Name
     pharmacy = cells[0].renderContents().strip()
+
+    # Manager
     manager = cells[1].renderContents().strip()
+
+    # Location, Phone, Fax are all in one cell
     location_contact = []
 
+    # Convert cell into individual lines
     for line in cells[2].strings:
         location_contact.append(line.strip())
 
+    # Attempt to split details out of first line
     try:
         temp_address = location_contact[0].strip()
 
+        # Postal Code is the last content after the final comma
         comma_pos = temp_address.rfind(",")
         postal = temp_address[comma_pos + 2:]
         temp_address = temp_address[0:comma_pos - 1]
 
+        # City is now the last content after the final comma
         comma_pos = temp_address.rfind(",")
         city = temp_address[comma_pos + 2:]
+
+        # City is the remaining information
         address = temp_address[0:comma_pos]
     except:
-        address = ""
+        # Failed to split properly, dump contents into address
+        address = location_contact[0].strip()
         city = ""
         postal = ""
+        
+        # Log issue
+        log.warn("Unable to parse address for %s" % pharmacy)
 
+    # Phone is typically the sixth entry
     try:
         phone = location_contact[5].strip()
     except:
         phone = ""
 
+        # Log issue
+        log.warn("Unable to parse phone for %s" % pharmacy)
+
+    # Fax is typically ninth entry
     try:
         fax = location_contact[8].strip()
     except:
         fax = ""
+
+        # Log issue
+        log.warn("Unable to parse fax for %s" % pharmacy)
 
     return {
         "pharmacy": pharmacy,
@@ -269,61 +307,48 @@ def extract_pharmacy_data(row):
 def request_pharmacy_data(ses, crawlDelay):
     data = []
     
-    print ("Extracting pharmacy data...")
+    log.info("STARTING PHARMACY DATA EXTRACTION")
 
-    start = 0
-    end = 236
-    length = end - start
-    step = 1
-    pharmacy_list = []
+    i = 250
+    stop = 0
 
-    for i in range (start, end + 1):
+    # Loop until 5 blank requests (signalling data end or repeated errors)
+    while stop < 1:
+	    # Pause request to comply with robots.txt crawl-delay
+        time.sleep(crawlDelay)
+
         # Create POST data for retrieving pharmacy information
-        page_num = str(i)
         post_data = {
 	        "view_name": "_acp_advance_filter",
 	        "view_display_id": "block",
-	        "page": ("0,%s" % page_num)
+	        "page": ("0,%s" % i)
         }
 
-	    # Processes AJAX response and collects list of pharmacies
+	    # Processes AJAX response and retrieve response
         try:
-            page_data = acp_ajax_request(session, post_data)
+            log.debug("Requesting page %s" % i)
 
-            for row in page_data:
+            page_data = acp_ajax_request(ses, post_data)
+        except Exception as e:
+            log.warn("Error with request for page %s: %s" % (i, e))
+            page_data = []
+        
+        # Checks if there is data in request; if not, increment stop counter
+        if not page_data:
+            stop = stop + 1
+
+        # Process AJAX request into a python list
+        for row in page_data:
+            try:
                 data.append(extract_pharmacy_data(row))
-        except:
-            data.append({
-                "pharmacy": ("Error with page %s" % str(i +1)),
-                "manager": "",
-                "address": "",
-                "city": "",
-                "postal": "",
-                "phone": "",
-                "fax": ""})
+            except Exception as e:
+                log.warn("Error processing page %s request: %s" % (i, e))
 
-        # Progress Bar
-        step = progress_bar("Screening", i - start, length, step)
-
-        # Pause request to comply with robots.txt crawl-delay
-        time.sleep(crawlDelay)
-
-    print("Extraction complete!\n\n")
+        i = i + 1
     
+    log.info("PHARMACY DATA EXTRACTION COMPLETE")
+
     return data
-
-def generate_extract_folder(root):
-    """Creates the folders for holding the extracted files"""
-
-    print ("Creating extract folder... ", end="")
-    extractLoc = root.child("extracts")
-
-    if not extractLoc.exists():
-        os.mkdir(extractLoc.absolute())
-    
-    print ("Complete!")
-
-    return {"root": root, "eLoc": extractLoc, "pLoc": parseLoc}
 
 def save_data(root, pharmacist, pharmacy):
     # Get the date
@@ -401,11 +426,13 @@ if canCrawl == True:
 
     session = generate_session(robotName)
     
-    # Extract Pharmacist Data
     if session:
+        # Extract Pharmacist Data
         pharmacistData = request_pharmacist_data(session, crawlDelay)
-    
-    print(pharmacistData)
+        print(pharmacistData)
+        # Extract Pharmacy Data
+        pharmacyData = request_pharmacy_data(session, crawlDelay)
+        print(pharmacyData)    
     """
     # Extract Pharmacy Data
     pharmacyData = extract_pharmacy_data(session)
@@ -424,4 +451,4 @@ if canCrawl == True:
 else:
    log.info("Rejected.")
 
-log.info("ALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL STARTED")
+log.info("ALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL COMPLETED")
