@@ -76,6 +76,7 @@ def get_today():
     return date
 
 def set_log_properties(conf):
+    log.setLevel(logging.DEBUG)
     logLoc = conf.get("rx_list", "log_loc")
     logDebug = True if conf.get("rx_list", "log_debug") == "True" else False
     
@@ -143,7 +144,7 @@ def get_permission(agent):
 
 def generate_session(user):
     """Create session with pharmacists.ab.ca"""
-    url = "https://pharmacisdts.ab.ca"
+    url = "https://pharmacists.ab.ca"
 
     try:
         session = Session()
@@ -199,15 +200,16 @@ def request_pharmacist_data(ses, crawlDelay):
     """Requests pharmacist data from the ACP website"""
     data = []
 
-    print ("Extracting pharmacist data...")
+    log.info("STARTING PHARMACIST DATA EXTRACTION")
 
-    start = 0
-    end = 1602
+    start = 1600
+    end = 1610 # Old value = 1602
     length = end - start
-    step = 1
-    pharmacist_list = []
-
+    
     for i in range (start, end + 1):
+	    # Pause request to comply with robots.txt crawl-delay
+        time.sleep(crawlDelay)
+
         # Create POST data for retrieving pharmacist information
         page_num = str(i)
         post_data = {
@@ -216,25 +218,21 @@ def request_pharmacist_data(ses, crawlDelay):
 	        "page": ("0,0,0,0,0,0,%s" % page_num)
         }
 
-	    # Processes AJAX response and collects list of pharmacists
+	    # Processes AJAX response and retrieve response
         try:
+            log.debug("Requesting page %s" % i)
+
             page_data = acp_ajax_request(ses, post_data)
-
-            for row in page_data:
+        except Exception as e:
+            log.warn("Error with request for page %s: %s" % (i, e))
+            page_data = []
+        
+        # Process AJAX request into a python list
+        for row in page_data:
+            try:
                 data.append(extract_pharmacist_data(row))
-        except:
-            data.append({
-			    "pharmacist": ("Error with page %s" % str(i +1)),
-			    "location": "",
-			    "registration": "",
-			    "authorizations": "",
-			    "restrictions": ""})
-
-	    # Progress Bar
-
-	    # Pause request to comply with robots.txt crawl-delay
-        time.sleep(crawlDelay)
-
+            except Exception as e:
+                log.warn("Error processing page %s request: %s" % (i, e))
     return data
 
 def extract_pharmacy_data(row):
@@ -394,7 +392,7 @@ privConfig = configparser.ConfigParser().read(configLoc)
 # Set up logging functions
 log = logging.getLogger(__name__)
 set_log_properties(pubConfig)
-
+log.warn("test")
 # Get the program/robot/crawler name
 robotName = pubConfig.get("rx_list", "user_agent")
 
@@ -404,11 +402,11 @@ log.info("ALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL STARTED")
 # Checks ACP for permission to crawl web page
 log.info("Checking robot.txt for permission to crawl")
 
-can_crawl = get_permission(robotName)
+canCrawl = get_permission(robotName)
 
 crawlDelay = 10 # as per robots.txt on 2017-02-25
 
-if can_crawl == True:
+if canCrawl == True:
     log.info("Permission to crawl granted")
 
     # EXTRACT DATA FROM WEBSITE
@@ -419,7 +417,9 @@ if can_crawl == True:
     
     # Extract Pharmacist Data
     if session:
-        pharmacistData = extract_pharmacist_data(session)
+        pharmacistData = request_pharmacist_data(session, crawlDelay)
+    
+    print(pharmacistData)
     """
     # Extract Pharmacy Data
     pharmacyData = extract_pharmacy_data(session)
@@ -436,6 +436,6 @@ if can_crawl == True:
     upload_data(root, pharmacistData, pharmacyData)
     """
 else:
-   print ("Rejected.")
+   log.info("Rejected.")
 
 log.info("ALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL STARTED")
