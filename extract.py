@@ -74,12 +74,12 @@ def get_today():
 
 def set_log_properties(conf):
     log.setLevel(logging.DEBUG)
-    logLoc = conf.get("rx_list", "log_loc")
+    logLoc = Path(conf.get("rx_list", "log_loc"))
     logDebug = True if conf.get("rx_list", "log_debug") == "True" else False
     
     # File Handler Settings
     date = get_today()
-    logName = root.child(logLoc, "%s.log" % date).absolute()
+    logName = logLoc.child("%s.log" % date).absolute()
     lhFormat = ""
     
     lh = logging.FileHandler(logName, "a")
@@ -187,13 +187,14 @@ def extract_pharmacist_data(row):
         "restrictions": restrictions
     }
 
-def request_pharmacist_data(ses, crawlDelay):
+def request_pharmacist_data(ses, conf, crawlDelay):
     """Requests pharmacist data from the ACP website"""
     data = []
 
     log.info("STARTING PHARMACIST DATA EXTRACTION")
 
-    i = 1640
+    i = int(conf.get("rx_list", "pharmacist_start"))
+    stopNum = int(conf.get("rx_list", "request_end"))
     stop = 0
 
     # Loop until 5 blank requests (signalling data end or repeated errors)
@@ -304,16 +305,17 @@ def extract_pharmacy_data(row):
         "fax": fax
     }
 
-def request_pharmacy_data(ses, crawlDelay):
+def request_pharmacy_data(ses, conf, crawlDelay):
     data = []
     
     log.info("STARTING PHARMACY DATA EXTRACTION")
 
-    i = 250
+    i = int(conf.get("rx_list", "pharmacy_start"))
+    stopNum = int(conf.get("rx_list", "request_end"))
     stop = 0
 
     # Loop until 5 blank requests (signalling data end or repeated errors)
-    while stop < 1:
+    while stop < stopNum:
 	    # Pause request to comply with robots.txt crawl-delay
         time.sleep(crawlDelay)
 
@@ -350,13 +352,12 @@ def request_pharmacy_data(ses, crawlDelay):
 
     return data
 
-def save_data(root, pharmacist, pharmacy):
-    # Get the date
-    today = datetime.date.today()
-    year = today.year
-    month = "%02d" % today.month
-    day = "%02d" % today.day
-    date = "%s-%s-%s" % (year, month, day)
+def save_data(pharmacist, pharmacy):
+    date = get_today()
+    savLoc = root.child("extracts")
+    pharmacistLoc = savLoc.child("%s - Pharmacist.csv" % date)
+    pharmacyLoc = savLoc.child("%s - Pharmacy.csv" % date)
+    
 
 def upload_data(root, pharmacist, pharmacy):
     """Upload data to MySQL Database"""
@@ -428,26 +429,19 @@ if canCrawl == True:
     
     if session:
         # Extract Pharmacist Data
-        pharmacistData = request_pharmacist_data(session, crawlDelay)
-        print(pharmacistData)
+        pharmacistData = request_pharmacist_data(
+            session, pubConfig, crawlDelay
+        )
+        
         # Extract Pharmacy Data
-        pharmacyData = request_pharmacy_data(session, crawlDelay)
-        print(pharmacyData)    
-    """
-    # Extract Pharmacy Data
-    pharmacyData = extract_pharmacy_data(session)
-    
-    # Generate directory to save files to
-    print ("SAVE EXTRACTED DATA")
-    print ("-------------------")
+        pharmacyData = request_pharmacy_data(
+            session, pubConfing, crawlDelay
+        )
+        
 
-    save_data(root, pharmacistData, pharmacyData)
+    save_data(pharmacistData, pharmacyData)
 
-    print ("UPLOAD EXTRACTED DATA")
-    print ("---------------------")
-
-    upload_data(root, pharmacistData, pharmacyData)
-    """
+    #upload_data(root, pharmacistData, pharmacyData)
 else:
    log.info("Rejected.")
 
