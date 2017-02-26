@@ -52,13 +52,12 @@
 """
 
 
+import configparser
 import logging
 from urllib import robotparser
-import configparser
+
 import os
 import datetime
-import codecs
-import sys
 from requests import Session
 import json
 from bs4 import BeautifulSoup
@@ -108,27 +107,6 @@ def set_log_properties(conf):
     log.addHandler(lh)
     log.addHandler(ch)
 
-def progress_bar(title, curPos, start, stop):
-    """Generates progress bar in console."""
-    
-    # Normalize start, stop, curPos
-    curPos = (curPos - start) + 1
-    stop = (stop - start) + 1 
-    start = 1
-
-    # Determine current progress
-    prog = 100.00 * (curPos / stop)
-    
-    if prog != 100:
-        progComp = "#" * math.floor(prog / 2)
-        progRem = " " * (50 - math.floor(prog / 2))
-        prog = "%.2f%%" % prog
-        print (("%s [%s%s] %s  \r" % (title, progComp, progRem, prog)), end="")
-        sys.stdout.flush()
-    else:
-        progComp = "#" * 50
-        print("%s [%s] Complete!" % (title, progComp))
-
 def get_permission(agent):
     """Checks the specified robot.txt file for access permission."""
     txtUrl = "https://pharmacists.ab.ca/robots.txt"
@@ -165,10 +143,12 @@ def acp_ajax_request(session, post_data):
         }
     )
     
+    # Returns the data in JSON format
     json_response = json.loads(response.text)
     json_response = json_response[1]['data']
     json_response = json_response.encode('utf8')
     
+    # Extracts out just the table rows containing data
     soup = BeautifulSoup(json_response, 'lxml')
     rows = soup.select("table.table-striped tbody tr")
     
@@ -202,11 +182,11 @@ def request_pharmacist_data(ses, crawlDelay):
 
     log.info("STARTING PHARMACIST DATA EXTRACTION")
 
-    start = 1600
-    end = 1610 # Old value = 1602
-    length = end - start
-    
-    for i in range (start, end + 1):
+    i = 1600
+    stop = 0
+
+    # Loop until 5 blank requests (signalling data end or repeated errors)
+    while stop < 5:
 	    # Pause request to comply with robots.txt crawl-delay
         time.sleep(crawlDelay)
 
@@ -227,12 +207,18 @@ def request_pharmacist_data(ses, crawlDelay):
             log.warn("Error with request for page %s: %s" % (i, e))
             page_data = []
         
+        # Checks if there is data in request; if not, increment stop counter
+        if not page_data:
+            stop = stop + 1
+
         # Process AJAX request into a python list
         for row in page_data:
             try:
                 data.append(extract_pharmacist_data(row))
             except Exception as e:
                 log.warn("Error processing page %s request: %s" % (i, e))
+
+        i = i + 1
     return data
 
 def extract_pharmacy_data(row):
@@ -392,7 +378,7 @@ privConfig = configparser.ConfigParser().read(configLoc)
 # Set up logging functions
 log = logging.getLogger(__name__)
 set_log_properties(pubConfig)
-log.warn("test")
+
 # Get the program/robot/crawler name
 robotName = pubConfig.get("rx_list", "user_agent")
 
