@@ -5,3 +5,4 @@
 
 # Other files/folders
 /__pycache__
+*.log
