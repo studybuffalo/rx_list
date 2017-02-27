@@ -60,6 +60,7 @@ import datetime
 from requests import Session
 import json
 from bs4 import BeautifulSoup
+import html
 import re
 import time
 import csv
@@ -175,15 +176,15 @@ def extract_pharmacist_data(row):
         location.append(line.strip())
 
     try:
-        pharmacy = location[0]
+        pharmacy = html.unescape(location[0])
     except:
         log.warn("Unable to identify pharmacy for %s" % pharmacist)
     
     
     if pharmacy:
         try:
-            tempAddress = location[1].strip()
-
+            tempAddress = html.unescape(location[1].strip())
+            
             try:
                 # Postal Code is the last content after the final comma
                 comma_pos = tempAddress.rfind(",")
@@ -304,6 +305,7 @@ def extract_pharmacy_data(row):
 
     # Pharmacy Name
     pharmacy = cells[0].renderContents().strip().decode("UTF-8")
+    pharmacy = html.unescape(pharmacy)
 
     # Manager
     manager = cells[1].renderContents().strip().decode("UTF-8")
@@ -317,7 +319,7 @@ def extract_pharmacy_data(row):
 
     # Attempt to split details out of first line
     try:
-        tempAddress = location_contact[0].strip()
+        tempAddress = html.unescape(location_contact[0].strip())
 
         # Postal Code is the last content after the final comma
         comma_pos = tempAddress.rfind(",")
