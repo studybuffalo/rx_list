@@ -63,6 +63,7 @@ from bs4 import BeautifulSoup
 import re
 import time
 import csv
+import pymysql
 
 def get_today():
      # Get the date
@@ -504,21 +505,55 @@ def upload_data(root, pharmacist, pharmacy):
     # Upload data to pharmacist table
     log.info("Uploading pharmacist data to %s" % tablePharmacist)
     
+    # Convert pharmacist data to list of list
+    data = []
+
+    for row in pharmacist:
+        data.append((
+            row["date"],
+            row["pharmacist"],
+            row["pharmacy"],
+            row["address"],
+            row["city"],
+            row["postal"],
+            row["phone"],
+            row["fax"],
+            row["registration"],
+            row["apa"],
+            row["inject"],
+            row["restrictions"]
+        ))
+
     query1 = "INSERT INTO %s " % tablePharmacist
     query2 = (
         "(date, pharmacist, pharmacy, address, city, postal, phone, "
-        "fax, registration, apa, inject, restriction) VALUES "
-        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        "fax, registration, apa, inject, restrictions) VALUES "
+        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     )
     query = query1 + query2
 
-    cursor.executemany(query, pharmacist)
+    cursor.executemany(query, data)
 
     log.info("Pharmacist data upload complete!")
     
     # Upload data to pharmacy table
     log.info("Uploading pharmacy data to %s" % tablePharmacy)
     
+    # Convert pharmacist data to list of list
+    data = []
+
+    for row in pharmacy:
+        data.append((
+            row["date"],
+            row["pharmacy"],
+            row["manager"],
+            row["address"],
+            row["city"],
+            row["postal"],
+            row["phone"],
+            row["fax"]
+        ))
+
     query1 = "INSERT INTO %s " % tablePharmacy
     query2 = (
         "(date, pharmacy, manager, address, city, postal, phone, fax) "
@@ -526,7 +561,7 @@ def upload_data(root, pharmacist, pharmacy):
     )
     query = query1 + query2
     
-    cursor.executemany(query, pharmacy)
+    cursor.executemany(query, data)
     
     log.info("Pharmacy data upload complete!")
 
@@ -534,6 +569,9 @@ def upload_data(root, pharmacist, pharmacy):
 
 
 # SET UP VARIABLES
+# Get the current date
+today = get_today()
+
 # Get the public config file and set the root directory
 config = configparser.ConfigParser()
 config.read("config.cfg")
@@ -545,9 +583,6 @@ set_log_properties(config)
 
 # Get the program/robot/crawler name
 robotName = config.get("rx_list", "user_agent")
-
-# Get the current date
-today = get_today()
 
 # PROGRAM START
 log.info("ALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL STARTED")
