@@ -80,8 +80,7 @@ def set_log_properties(conf):
     logDebug = True if conf.get("rx_list", "log_debug") == "True" else False
     
     # File Handler Settings
-    date = get_today()
-    logName = logLoc.child("%s.log" % date).absolute()
+    logName = logLoc.child("%s.log" % today).absolute()
     lhFormat = ""
     
     lh = logging.FileHandler(logName, "a")
@@ -235,6 +234,7 @@ def extract_pharmacist_data(row):
     restrictions = cells[4].renderContents().strip().decode("UTF-8")
 
     return {
+        "date": today,
         "pharmacist": pharmacist,
         "pharmacy": pharmacy,
         "address": address,
@@ -357,6 +357,7 @@ def extract_pharmacy_data(row):
         log.warn("Unable to parse fax for %s" % pharmacy)
 
     return {
+        "date": today,
         "pharmacy": pharmacy,
         "manager": manager,
         "address": address,
@@ -413,13 +414,12 @@ def request_pharmacy_data(ses, conf, crawlDelay):
 
     return data
 
-def save_data(pharmacist, pharmacy):
-    date = get_today()
+def save_data(config, pharmacist, pharmacy):
     savLoc = root.child("extracts")
     
     # Set File Names
-    pharmacistLoc = savLoc.child("%s - Pharmacist.csv" % date)
-    pharmacyLoc = savLoc.child("%s - Pharmacy.csv" % date)
+    pharmacistLoc = savLoc.child("%s - Pharmacist.csv" % today)
+    pharmacyLoc = savLoc.child("%s - Pharmacy.csv" % today)
 
     # Write Pharmacist File as CSV
     try:
@@ -487,46 +487,67 @@ def upload_data(root, pharmacist, pharmacy):
     config = configparser.ConfigParser()
     config.read(cLoc)
 
-    db = config.get("mysql_db_rx", "db")
-    host = config.get("mysql_db_rx", "host")
-    user = config.get("mysql_user_rx_ent", "user")
-    pw = config.get("mysql_user_rx_ent", "password")
+    db = config.get("rx_list", "db")
+    host = config.get("rx_list", "host")
+    user = config.get("rx_list", "user")
+    pw = config.get("rx_list", "password")
+    tablePharmacist = config.get("rx_list", "tablePharmacist")
+    tablePharmacy = config.get("rx_list", "tablePharmacy")
 
     # Connect to database
-    print ("Connecting to database... ", end="")
-    
+    log.info("Connecting to %s" % db)
     conn = pymysql.connect(host, user, pw, db)
     cursor = conn.cursor()
-
-    print ("Complete!\n")
     
-    print ("Uploading pharmacist data... ", end="")
+    log.info("Successfully connected to database")
 
-    print ("Complete!")
+    # Upload data to pharmacist table
+    log.info("Uploading pharmacist data to %s" % tablePharmacist)
+    
+    query1 = "INSERT INTO %s " % tablePharmacist
+    query2 = (
+        "(date, pharmacist, pharmacy, address, city, postal, phone, "
+        "fax, registration, apa, inject, restriction) VALUES "
+        "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    )
+    query = query1 + query2
 
-    print ("Uploading pharmacy data... ", end="")
+    cursor.executemany(query, pharmacist)
 
-    print ("Complete!\n")
+    log.info("Pharmacist data upload complete!")
+    
+    # Upload data to pharmacy table
+    log.info("Uploading pharmacy data to %s" % tablePharmacy)
+    
+    query1 = "INSERT INTO %s " % tablePharmacy
+    query2 = (
+        "(date, pharmacy, manager, address, city, postal, phone, fax) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+    )
+    query = query1 + query2
+    
+    cursor.executemany(query, pharmacy)
+    
+    log.info("Pharmacy data upload complete!")
 
     conn.close()
 
 
 # SET UP VARIABLES
 # Get the public config file and set the root directory
-pubConfig = configparser.ConfigParser()
-pubConfig.read("config.cfg")
-root = Path(pubConfig.get("rx_list", "root"))
-
-# Get the private config file
-configLoc = root.parent.child("config", "python_config.cfg").absolute()
-privConfig = configparser.ConfigParser().read(configLoc)
+config = configparser.ConfigParser()
+config.read("config.cfg")
+root = Path(config.get("rx_list", "root"))
 
 # Set up logging functions
 log = logging.getLogger(__name__)
-set_log_properties(pubConfig)
+set_log_properties(config)
 
 # Get the program/robot/crawler name
-robotName = pubConfig.get("rx_list", "user_agent")
+robotName = config.get("rx_list", "user_agent")
+
+# Get the current date
+today = get_today()
 
 # PROGRAM START
 log.info("ALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL STARTED")
@@ -549,18 +570,14 @@ if canCrawl == True:
     
     if session:
         # Extract Pharmacist Data
-        pharmacistData = request_pharmacist_data(
-            session, pubConfig, crawlDelay
-        )
+        pharmacistData = request_pharmacist_data(session, config, crawlDelay)
         
         # Extract Pharmacy Data
-        pharmacyData = request_pharmacy_data(
-            session, pubConfig, crawlDelay
-        )
+        pharmacyData = request_pharmacy_data(session, config, crawlDelay)
         
-    save_data(pharmacistData, pharmacyData)
+    save_data(config, pharmacistData, pharmacyData)
 
-    #upload_data(root, pharmacistData, pharmacyData)
+    upload_data(root, pharmacistData, pharmacyData)
 else:
    log.info("Rejected.")
 
