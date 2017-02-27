@@ -164,60 +164,56 @@ def extract_pharmacist_data(row):
 
     # Convert pharmacy cell into individual lines
     location = []
-
+    pharmacy = ""
+    address = ""
+    city = ""
+    postal = ""
+    phone = ""
+    fax = ""
+    
     for line in cells[1].strings:
         location.append(line.strip())
 
     try:
         pharmacy = location[0]
     except:
-        pharmacy = ""
-
         log.warn("Unable to identify pharmacy for %s" % pharmacist)
+    
+    
+    if pharmacy:
+        try:
+            tempAddress = location[1].strip()
 
-    try:
-        tempAddress = location[1].strip()
+            try:
+                # Postal Code is the last content after the final comma
+                comma_pos = tempAddress.rfind(",")
+                postal = tempAddress[comma_pos + 2:]
+                tempAddress = tempAddress[0:comma_pos].strip()
+
+                # City is now the last content after the final comma
+                comma_pos = tempAddress.rfind(",")
+                city = tempAddress[comma_pos + 2:]
+
+                # Address is the remaining information
+                address = tempAddress[0:comma_pos]
+            except:
+                # Failed to split properly, dump contents into address
+                address = tempAddress
+
+                # Log issue
+                log.warn("Unable to parse address for %s" % pharmacist)
+        except:
+            log.warn("Unable to find address for %s" % pharmacist)
+        
+        try:
+            phone = re.sub(r"\D", "", location[3])
+        except:
+            log.warn("Unable to identify phone for %s" % pharmacist)
 
         try:
-            # Postal Code is the last content after the final comma
-            comma_pos = tempAddress.rfind(",")
-            postal = tempAddress[comma_pos + 2:]
-            tempAddress = tempAddress[0:comma_pos].strip()
-
-            # City is now the last content after the final comma
-            comma_pos = tempAddress.rfind(",")
-            city = tempAddress[comma_pos + 2:]
-
-            # Address is the remaining information
-            address = tempAddress[0:comma_pos]
+            fax = re.sub(r"\D", "", location[4])
         except:
-            # Failed to split properly, dump contents into address
-            address = tempAddress
-            city = ""
-            postal = ""
-        
-            # Log issue
-            log.warn("Unable to parse address for %s" % pharmacist)
-    except:
-        address = ""
-        city = ""
-        postal = ""
-
-        log.warn("Unable to find address for %s" % pharmacist)
-
-    try:
-        phone = re.sub(r"\D", "", location[3])
-    except:
-        phone = ""
-
-        log.warn("Unable to identify phone for %s" % pharmacist)
-
-    try:
-        fax = re.sub(r"\D", "", location[4])
-    except:
-        fax = ""
-
-        log.warn("Unable to identify fax for %s" % pharmacist)
+            log.warn("Unable to identify fax for %s" % pharmacist)
 
     # Registration Status
     registration = cells[2].renderContents().strip().decode("UTF-8")
