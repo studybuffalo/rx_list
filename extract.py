@@ -220,6 +220,16 @@ def extract_pharmacist_data(row):
 
     # Authorizations
     authorizations = cells[3].renderContents().strip().decode("UTF-8")
+    
+    if "Addtl Prescribing Authorization" in authorizations:
+        apa = 1
+    else:
+        apa = 0
+
+    if "Administer Drugs by Injection" in authorizations:
+        inject = 1
+    else:
+        inject = 0
 
     # Restrictions
     restrictions = cells[4].renderContents().strip().decode("UTF-8")
@@ -233,7 +243,8 @@ def extract_pharmacist_data(row):
         "phone": phone,
         "fax": fax,
         "registration": registration,
-        "authorizations": authorizations,
+        "apa": apa,
+        "inject": inject,
         "restrictions": restrictions
     }
 
@@ -431,7 +442,8 @@ def save_data(pharmacist, pharmacy):
                     row["phone"],
                     row["fax"],
                     row["registration"],
-                    row["authorizations"],
+                    row["apa"],
+                    row["inject"],
                     row["restrictions"]
                 ])
 
