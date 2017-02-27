@@ -159,7 +159,7 @@ def extract_pharmacist_data(row):
     cells = row.find_all("td")
 
     # Pharmacist Name
-    pharmacist = cells[0].renderContents().strip()
+    pharmacist = cells[0].renderContents().strip().decode("UTF-8")
 
     # Location Data
     location = ""
@@ -172,13 +172,13 @@ def extract_pharmacist_data(row):
     location = location.strip()
 
     # Registration Status
-    registration = cells[2].renderContents().strip()
+    registration = cells[2].renderContents().strip().decode("UTF-8")
 
     # Authorizations
-    authorizations = cells[3].renderContents().strip()
+    authorizations = cells[3].renderContents().strip().decode("UTF-8")
 
     # Restrictions
-    restrictions = cells[4].renderContents().strip()
+    restrictions = cells[4].renderContents().strip().decode("UTF-8")
 
     return {
         "pharmacist": pharmacist,
@@ -242,10 +242,10 @@ def extract_pharmacy_data(row):
     cells = row.find_all("td")
 
     # Pharmacy Name
-    pharmacy = cells[0].renderContents().strip()
+    pharmacy = cells[0].renderContents().strip().decode("UTF-8")
 
     # Manager
-    manager = cells[1].renderContents().strip()
+    manager = cells[1].renderContents().strip().decode("UTF-8")
 
     # Location, Phone, Fax are all in one cell
     location_contact = []
