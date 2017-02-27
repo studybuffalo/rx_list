@@ -161,15 +161,62 @@ def extract_pharmacist_data(row):
     # Pharmacist Name
     pharmacist = cells[0].renderContents().strip().decode("UTF-8")
 
-    # Location Data
-    location = ""
-    location_strings = cells[1].strings
-    
-    for string in location_strings:
-        location += string.strip() + "\n"
-    
-    location = location.replace("View the Map\n", "")
-    location = location.strip()
+    # Convert pharmacy cell into individual lines
+    location = []
+
+    for line in cells[1].strings:
+        location.append(line.strip())
+
+    try:
+        pharmacy = location[0]
+    except:
+        pharmacy = ""
+
+        log.warn("Unable to identify pharmacy for %s" % pharmacist)
+
+    try:
+        tempAddress = location[1].strip()
+
+        try:
+            # Postal Code is the last content after the final comma
+            comma_pos = tempAddress.rfind(",")
+            postal = tempAddress[comma_pos + 2:]
+            temp_address = tempAddress[0:comma_pos - 1]
+
+            # City is now the last content after the final comma
+            comma_pos = tempAddress.rfind(",")
+            city = tempAddress[comma_pos + 2:]
+
+            # Address is the remaining information
+            address = tempAddress[0:comma_pos]
+        except:
+            # Failed to split properly, dump contents into address
+            address = tempAddress
+            city = ""
+            postal = ""
+        
+            # Log issue
+            log.warn("Unable to parse address for %s" % pharmacist)
+    except:
+        address = ""
+        city = ""
+        postal = ""
+
+        log.warn("Unable to find address for %s" % pharmacist)
+
+    try:
+        phone = location[3][3:]
+    except:
+        phone = ""
+
+        log.warn("Unable to identify phone for %s" % pharmacist)
+
+    try:
+        fax = location[4][3:]
+    except:
+        fax = ""
+
+        log.warn("Unable to identify fax for %s" % pharmacist)
 
     # Registration Status
     registration = cells[2].renderContents().strip().decode("UTF-8")
@@ -182,7 +229,12 @@ def extract_pharmacist_data(row):
 
     return {
         "pharmacist": pharmacist,
-        "location": location,
+        "pharmacy": pharmacy,
+        "address": address,
+        "city": city,
+        "postal": postal,
+        "phone": phone,
+        "fax": fax,
         "registration": registration,
         "authorizations": authorizations,
         "restrictions": restrictions
@@ -375,7 +427,12 @@ def save_data(pharmacist, pharmacy):
             for row in pharmacist:
                 csvFile.writerow([
                     row["pharmacist"],
-                    row["location"],
+                    row["pharmacy"],
+                    row["address"],
+                    row["city"],
+                    row["postal"],
+                    row["phone"],
+                    row["fax"],
                     row["registration"],
                     row["authorizations"],
                     row["restrictions"]
@@ -492,7 +549,6 @@ if canCrawl == True:
             session, pubConfig, crawlDelay
         )
         
-
     save_data(pharmacistData, pharmacyData)
 
     #upload_data(root, pharmacistData, pharmacyData)
