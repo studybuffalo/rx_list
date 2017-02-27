@@ -60,6 +60,7 @@ import datetime
 from requests import Session
 import json
 from bs4 import BeautifulSoup
+import re
 import time
 import csv
 
@@ -205,14 +206,14 @@ def extract_pharmacist_data(row):
         log.warn("Unable to find address for %s" % pharmacist)
 
     try:
-        phone = location[3][3:]
+        phone = re.sub(r"\D", "", location[3])
     except:
         phone = ""
 
         log.warn("Unable to identify phone for %s" % pharmacist)
 
     try:
-        fax = location[4][3:]
+        fax = re.sub(r"\D", "", location[4])
     except:
         fax = ""
 
