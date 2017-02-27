@@ -181,7 +181,7 @@ def extract_pharmacist_data(row):
             # Postal Code is the last content after the final comma
             comma_pos = tempAddress.rfind(",")
             postal = tempAddress[comma_pos + 2:]
-            temp_address = tempAddress[0:comma_pos - 1]
+            tempAddress = tempAddress[0:comma_pos - 1]
 
             # City is now the last content after the final comma
             comma_pos = tempAddress.rfind(",")
@@ -308,19 +308,19 @@ def extract_pharmacy_data(row):
 
     # Attempt to split details out of first line
     try:
-        temp_address = location_contact[0].strip()
+        tempAddress = location_contact[0].strip()
 
         # Postal Code is the last content after the final comma
-        comma_pos = temp_address.rfind(",")
-        postal = temp_address[comma_pos + 2:]
-        temp_address = temp_address[0:comma_pos - 1]
+        comma_pos = tempAddress.rfind(",")
+        postal = tempAddress[comma_pos + 2:]
+        tempAddress = tempAddress[0:comma_pos - 1]
 
         # City is now the last content after the final comma
-        comma_pos = temp_address.rfind(",")
-        city = temp_address[comma_pos + 2:]
+        comma_pos = tempAddress.rfind(",")
+        city = tempAddress[comma_pos + 2:]
 
         # City is the remaining information
-        address = temp_address[0:comma_pos]
+        address = tempAddress[0:comma_pos]
     except:
         # Failed to split properly, dump contents into address
         address = location_contact[0].strip()
