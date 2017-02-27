@@ -491,8 +491,8 @@ def upload_data(root, pharmacist, pharmacy):
     host = config.get("rx_list", "host")
     user = config.get("rx_list", "user")
     pw = config.get("rx_list", "password")
-    tablePharmacist = config.get("rx_list", "tablePharmacist")
-    tablePharmacy = config.get("rx_list", "tablePharmacy")
+    tablePharmacist = config.get("rx_list", "table_pharmacist")
+    tablePharmacy = config.get("rx_list", "table_pharmacy")
 
     # Connect to database
     log.info("Connecting to %s" % db)
@@ -574,9 +574,12 @@ if canCrawl == True:
         
         # Extract Pharmacy Data
         pharmacyData = request_pharmacy_data(session, config, crawlDelay)
-        
+    
+    # SAVING DATA
+    # Save data to file    
     save_data(config, pharmacistData, pharmacyData)
 
+    # Upload data to database
     upload_data(root, pharmacistData, pharmacyData)
 else:
    log.info("Rejected.")
