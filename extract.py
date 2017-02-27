@@ -61,6 +61,7 @@ from requests import Session
 import json
 from bs4 import BeautifulSoup
 import time
+import csv
 
 def get_today():
      # Get the date
@@ -355,9 +356,62 @@ def request_pharmacy_data(ses, conf, crawlDelay):
 def save_data(pharmacist, pharmacy):
     date = get_today()
     savLoc = root.child("extracts")
+    
+    # Set File Names
     pharmacistLoc = savLoc.child("%s - Pharmacist.csv" % date)
     pharmacyLoc = savLoc.child("%s - Pharmacy.csv" % date)
-    
+
+    # Write Pharmacist File as CSV
+    try:
+        with open(pharmacistLoc, "w") as file:
+            csvFile = csv.writer(
+                file,
+                delimiter=",", 
+                quotechar='"',
+                lineterminator="\n",
+                quoting=csv.QUOTE_ALL
+            )
+            
+            for row in pharmacist:
+                csvFile.writerow([
+                    row["pharmacist"],
+                    row["location"],
+                    row["registration"],
+                    row["authorizations"],
+                    row["restrictions"]
+                ])
+
+            log.info("Pharmacist data written to %s" % pharmacistLoc)
+    except Exception as e:
+        log.warn(
+            "Error writing pharmacist data to %s: %s" % (pharmacistLoc, e)
+        )
+
+    # Write Pharmacy File as CSV
+    try:
+        with open(pharmacyLoc, "w") as file:
+            csvFile = csv.writer(
+                file,
+                delimiter=",",
+                quotechar='"', 
+                lineterminator="\n",
+                quoting=csv.QUOTE_ALL
+            )
+            
+            for row in pharmacy:
+                csvFile.writerow([
+                     row["pharmacy"],
+                     row["manager"],
+                     row["address"],
+                     row["city"],
+                     row["postal"],
+                     row["phone"],
+                     row["fax"]
+                ])
+            
+            log.info("Pharmacy data written to %s" % pharmacyLoc)
+    except Exception as e:
+        log.warn("Error writing pharmacy data to %s: %s" % (pharmacyLoc, e))
 
 def upload_data(root, pharmacist, pharmacy):
     """Upload data to MySQL Database"""
@@ -435,7 +489,7 @@ if canCrawl == True:
         
         # Extract Pharmacy Data
         pharmacyData = request_pharmacy_data(
-            session, pubConfing, crawlDelay
+            session, pubConfig, crawlDelay
         )
         
 
