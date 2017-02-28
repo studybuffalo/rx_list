@@ -499,17 +499,23 @@ def upload_data(root, pharmacist, pharmacy):
 
     # Connect to database
     log.info("Connecting to %s" % db)
-    conn = pymysql.connect(
-        host=host,
-        user=user,
-        passwd=pw,
-        db=db,
-        charset="utf8"
-    )
+    
+    try:
+        conn = pymysql.connect(
+            host=host,
+            user=user,
+            passwd=pw,
+            db=db,
+            charset="utf8"
+        )
+        
+        log.info("Successfully connected to database")
+
+    except Exception as e:
+        log.critical("Unable to connected to database %s: %s" % (db, e))
+
     cursor = conn.cursor()
     
-    log.info("Successfully connected to database")
-
     # Upload data to pharmacist table
     log.info("Uploading pharmacist data to %s" % tablePharmacist)
     
@@ -540,10 +546,15 @@ def upload_data(root, pharmacist, pharmacy):
     )
     query = query1 + query2
 
-    cursor.executemany(query, data)
+    try:
+        cursor.executemany(query, data)
+        log.info("Pharmacist data upload complete!")
+    except Exception as e:
+        log.critical(
+            "Unable to upload pharmacist data to table %s: %s" % 
+            (tablePharmacist, e)
+        )
 
-    log.info("Pharmacist data upload complete!")
-    
     # Upload data to pharmacy table
     log.info("Uploading pharmacy data to %s" % tablePharmacy)
     
@@ -569,10 +580,15 @@ def upload_data(root, pharmacist, pharmacy):
     )
     query = query1 + query2
     
-    cursor.executemany(query, data)
+    try:
+        cursor.executemany(query, data)
     
-    log.info("Pharmacy data upload complete!")
-
+        log.info("Pharmacy data upload complete!")
+    except Exception as e:
+        log.critical(
+            "Unable to upload pharmacy data to table %s: %s" % 
+            (tablePharmacy, e)
+        )
     conn.close()
 
 
