@@ -67,15 +67,8 @@ import csv
 import pymysql
 
 
-class NewFileHandler(logging.FileHandler):
-    """Update FileHandler to name logs the current date"""
-    def __init__(self, path, mode = 'a'):
-        # Takes the provided path and appends the date as the log name
-        filename = Path(path, "%s.log" % today).absolute()
-        super(NewFileHandler,self).__init__(filename, mode)
-
 def get_today():
-     # Get the date
+    # Get the date
     today = datetime.date.today()
     year = today.year
     month = "%02d" % today.month
