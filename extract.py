@@ -86,8 +86,6 @@ def set_log_properties(conf):
     else:
         logging.config.fileConfig("logger_debug.cfg")
 
-    logSave = True if conf.get("rx_list", "log") == "True" else False
-
     log = logging.getLogger(__name__)
     
     return log
