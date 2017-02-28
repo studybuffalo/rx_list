@@ -53,7 +53,7 @@
 
 from unipath import Path
 import configparser
-import logging
+import logging.config
 from urllib import robotparser
 import os
 import datetime
@@ -66,6 +66,14 @@ import time
 import csv
 import pymysql
 
+
+class NewFileHandler(logging.FileHandler):
+    """Update FileHandler to name logs the current date"""
+    def __init__(self, path, mode = 'a'):
+        # Takes the provided path and appends the date as the log name
+        filename = Path(path, "%s.log" % today).absolute()
+        super(NewFileHandler,self).__init__(filename, mode)
+
 def get_today():
      # Get the date
     today = datetime.date.today()
@@ -77,36 +85,17 @@ def get_today():
     return date
 
 def set_log_properties(conf):
-    log.setLevel(logging.DEBUG)
-    logLoc = Path(conf.get("rx_list", "log_loc"))
+    """Sets up logging settings and returns logger"""
     logDebug = True if conf.get("rx_list", "log_debug") == "True" else False
     
-    # File Handler Settings
-    logName = logLoc.child("%s.log" % today).absolute()
-    lhFormat = ""
-    
-    lh = logging.FileHandler(logName, "a")
-    lh.setFormatter(lhFormat)
-
-    # Console Handler Settings
-    chFormat = logging.Formatter("%(message)s")
-        
-    ch = logging.StreamHandler()
-
-    ch.setFormatter(chFormat)
-    
-    log.addHandler(ch)
-
-    # Set levels to debug if logDebug == True
     if logDebug:
-        lh.setLevel(logging.DEBUG)
-        ch.setLevel(logging.DEBUG)
+        logging.config.fileConfig("logger.cfg")
     else:
-        lh.setLevel(logging.INFO)
-        ch.setLevel(logging.CRITICAL)
-    
-    log.addHandler(lh)
-    log.addHandler(ch)
+        logging.config.fileConfig("logger_debug.cfg")
+
+    log = logging.getLogger(__name__)
+
+    return log
 
 def get_permission(agent):
     """Checks the specified robot.txt file for access permission."""
@@ -602,8 +591,7 @@ config.read("config.cfg")
 root = Path(config.get("rx_list", "root"))
 
 # Set up logging functions
-log = logging.getLogger(__name__)
-set_log_properties(config)
+log = set_log_properties(config)
 
 # Get the program/robot/crawler name
 robotName = config.get("rx_list", "user_agent")
@@ -620,7 +608,7 @@ crawlDelay = 10 # as per robots.txt on 2017-02-25
 
 if canCrawl == True:
     log.info("Permission to crawl granted")
-
+    
     # EXTRACT DATA FROM WEBSITE
     # Generate session with ACP website
     log.debug("Generating session with ACP website")
