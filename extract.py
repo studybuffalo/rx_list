@@ -499,7 +499,13 @@ def upload_data(root, pharmacist, pharmacy):
 
     # Connect to database
     log.info("Connecting to %s" % db)
-    conn = pymysql.connect(host, user, pw, db)
+    conn = pymysql.connect(
+        host=host,
+        user=user,
+        passwd=pw,
+        db=db,
+        charset="utf8"
+    )
     cursor = conn.cursor()
     
     log.info("Successfully connected to database")
