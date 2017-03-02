@@ -68,7 +68,7 @@ import pymysql
 
 
 def get_today():
-    # Get the date
+    """Returns todays date"""
     today = datetime.date.today()
     year = today.year
     month = "%02d" % today.month
@@ -92,6 +92,15 @@ def set_log_properties(conf):
 
 def get_permission(agent):
     """Checks the specified robot.txt file for access permission."""
+    class Crawl:
+        """Class to contain robot parser output"""
+        can = False
+        delay = 0
+
+        def __init__(self, can, delay):
+            self.can = can
+            self.delay = delay
+    
     txtUrl = "https://pharmacists.ab.ca/robots.txt"
     reqUrl = "https://pharmacists.ab.ca/views/"
 
@@ -100,8 +109,9 @@ def get_permission(agent):
     robot.read()
 
     can_crawl = robot.can_fetch(agent, reqUrl)
-    
-    return can_crawl
+    crawl_delay = 10
+
+    return Crawl(can_crawl, crawl_delay)
 
 def generate_session(user):
     """Create session with pharmacists.ab.ca"""
@@ -595,11 +605,9 @@ log.info("ALBERTA PHARMACIST AND PHARMACY EXTRACTION TOOL STARTED")
 # Checks ACP for permission to crawl web page
 log.info("Checking robot.txt for permission to crawl")
 
-canCrawl = get_permission(robotName)
+crawl = get_permission(robotName)
 
-crawlDelay = 10 # as per robots.txt on 2017-02-25
-
-if canCrawl == True:
+if crawl.can == True:
     log.info("Permission to crawl granted")
     
     # EXTRACT DATA FROM WEBSITE
@@ -610,10 +618,10 @@ if canCrawl == True:
     
     if session:
         # Extract Pharmacist Data
-        pharmacistData = request_pharmacist_data(session, config, crawlDelay)
+        pharmacistData = request_pharmacist_data(session, config, crawl.delay)
         
         # Extract Pharmacy Data
-        pharmacyData = request_pharmacy_data(session, config, crawlDelay)
+        pharmacyData = request_pharmacy_data(session, config, crawl.delay)
     
     # SAVING DATA
     # Save data to file    
