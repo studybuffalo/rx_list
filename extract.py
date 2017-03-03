@@ -147,101 +147,125 @@ def acp_ajax_request(session, post_data):
     
     return rows
 
-def extract_pharmacist_data(row):
-    """Extracts pharmacist details from the table row"""
-    # Data is contained within the table cells
-    cells = row.find_all("td")
-
-    # Pharmacist Name
-    pharmacist = cells[0].renderContents().strip().decode("UTF-8")
-
-    # Convert pharmacy cell into individual lines
-    location = []
+class PharmacistData:
+    """Takes a row of pharmacist table data and converts to object"""
+    pharmacist = ""
     pharmacy = ""
     address = ""
     city = ""
     postal = ""
     phone = ""
     fax = ""
-    
-    for line in cells[1].strings:
-        location.append(line.strip())
+    registration = ""
+    apa = ""
+    inject = ""
+    restrictions = ""
 
-    try:
-        pharmacy = html.unescape(location[0])
-    except:
-        log.warn("Unable to identify pharmacy for %s" % pharmacist)
-    
-    
-    if pharmacy:
+    def __init__(self, row):
+        # Data is contained within the table cells
+        cells = row.find_all("td")
+
+        # Pharmacist Name
+        pharmacist = cells[0].renderContents().strip().decode("UTF-8")
+
+        # Convert pharmacy cell into individual lines
+        location = []
+
+        for line in cells[1].strings:
+            location.append(line.strip())
+
         try:
-            tempAddress = html.unescape(location[1].strip())
-            
+            pharmacy = html.unescape(location[0])
+        except:
+            log.warn("Unable to identify pharmacy for %s" % pharmacist)
+    
+    
+        if pharmacy:
             try:
-                # Postal Code is the last content after the final comma
-                comma_pos = tempAddress.rfind(",")
-                postal = tempAddress[comma_pos + 2:]
-                tempAddress = tempAddress[0:comma_pos].strip()
+                tempAddress = html.unescape(location[1].strip())
+            
+                try:
+                    # Postal Code is the last content after the final comma
+                    comma_pos = tempAddress.rfind(",")
+                    postal = tempAddress[comma_pos + 2:]
+                    tempAddress = tempAddress[0:comma_pos].strip()
 
-                # City is now the last content after the final comma
-                comma_pos = tempAddress.rfind(",")
-                city = tempAddress[comma_pos + 2:]
+                    # City is now the last content after the final comma
+                    comma_pos = tempAddress.rfind(",")
+                    city = tempAddress[comma_pos + 2:]
 
-                # Address is the remaining information
-                address = tempAddress[0:comma_pos]
+                    # Address is the remaining information
+                    address = tempAddress[0:comma_pos]
+                except:
+                    # Failed to split properly, dump contents into address
+                    address = tempAddress
+
+                    # Log issue
+                    log.warn("Unable to parse address for %s" % pharmacist)
             except:
-                # Failed to split properly, dump contents into address
-                address = tempAddress
-
-                # Log issue
-                log.warn("Unable to parse address for %s" % pharmacist)
-        except:
-            log.warn("Unable to find address for %s" % pharmacist)
+                log.warn("Unable to find address for %s" % pharmacist)
         
-        try:
-            phone = re.sub(r"\D", "", location[3])
-        except:
-            log.warn("Unable to identify phone for %s" % pharmacist)
+            try:
+                phone = re.sub(r"\D", "", location[3])
+            except:
+                log.warn("Unable to identify phone for %s" % pharmacist)
 
-        try:
-            fax = re.sub(r"\D", "", location[4])
-        except:
-            log.warn("Unable to identify fax for %s" % pharmacist)
+            try:
+                fax = re.sub(r"\D", "", location[4])
+            except:
+                log.warn("Unable to identify fax for %s" % pharmacist)
 
-    # Registration Status
-    registration = cells[2].renderContents().strip().decode("UTF-8")
+        # Registration Status
+        registration = cells[2].renderContents().strip().decode("UTF-8")
 
-    # Authorizations
-    authorizations = cells[3].renderContents().strip().decode("UTF-8")
+        # Authorizations
+        authorizations = cells[3].renderContents().strip().decode("UTF-8")
     
-    if "Addtl Prescribing Authorization" in authorizations:
-        apa = 1
-    else:
-        apa = 0
+        if "Addtl Prescribing Authorization" in authorizations:
+            apa = 1
+        else:
+            apa = 0
 
-    if "Administer Drugs by Injection" in authorizations:
-        inject = 1
-    else:
-        inject = 0
+        if "Administer Drugs by Injection" in authorizations:
+            inject = 1
+        else:
+            inject = 0
 
-    # Restrictions
-    restrictions = cells[4].renderContents().strip().decode("UTF-8")
+        # Restrictions
+        restrictions = cells[4].renderContents().strip().decode("UTF-8")
 
-    return {
-        "date": today,
-        "pharmacist": pharmacist,
-        "pharmacy": pharmacy,
-        "address": address,
-        "city": city,
-        "postal": postal,
-        "phone": phone,
-        "fax": fax,
-        "registration": registration,
-        "apa": apa,
-        "inject": inject,
-        "restrictions": restrictions
-    }
+        self.date = today
+        self.pharmacist = pharmacist
+        self.pharmacy = pharmacy
+        self.address = address
+        self.city = city
+        self.postal = postal
+        self.phone = phone
+        self.fax = fax
+        self.registration = registration
+        self.apa
+        self.inject = inject
+        self.restrictions = restrictions
 
+        return {
+            "date": today,
+            "pharmacist": pharmacist,
+            "pharmacy": pharmacy,
+            "address": address,
+            "city": city,
+            "postal": postal,
+            "phone": phone,
+            "fax": fax,
+            "registration": registration,
+            "apa": apa,
+            "inject": inject,
+            "restrictions": restrictions
+        }
+
+
+def extract_pharmacist_data(row):
+    """Extracts pharmacist details from the table row"""
+    
 def request_pharmacist_data(ses, conf, crawlDelay):
     """Requests pharmacist data from the ACP website"""
     data = []
