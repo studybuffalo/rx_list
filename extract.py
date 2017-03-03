@@ -67,86 +67,6 @@ import csv
 import pymysql
 
 
-def get_today():
-    """Returns todays date"""
-    today = datetime.date.today()
-    year = today.year
-    month = "%02d" % today.month
-    day = "%02d" % today.day
-    date = "%s-%s-%s" % (year, month, day)
-
-    return date
-
-def set_log_properties(conf):
-    """Sets up logging settings and returns logger"""
-    logDebug = True if conf.get("rx_list", "log_debug") == "True" else False
-    
-    if logDebug:
-        logging.config.fileConfig("logger_debug.cfg")
-    else:
-        logging.config.fileConfig("logger.cfg")
-
-    log = logging.getLogger(__name__)
-    
-    return log
-
-def get_permission(agent):
-    """Checks the specified robot.txt file for access permission."""
-    class Crawl:
-        """Class to contain robot parser output"""
-        can = False
-        delay = 0
-
-        def __init__(self, can, delay):
-            self.can = can
-            self.delay = delay
-    
-    txtUrl = "https://pharmacists.ab.ca/robots.txt"
-    reqUrl = "https://pharmacists.ab.ca/views/"
-
-    robot = robotparser.RobotFileParser()
-    robot.set_url(txtUrl)
-    robot.read()
-
-    can_crawl = robot.can_fetch(agent, reqUrl)
-    crawl_delay = 10
-
-    return Crawl(can_crawl, crawl_delay)
-
-def generate_session(user):
-    """Create session with pharmacists.ab.ca"""
-    url = "https://pharmacists.ab.ca"
-
-    try:
-        session = Session()
-        session.head(url, headers={"user-agent": user})
-    except Exception as e:
-        log.critical(e)
-        session = None
-        
-    return session
-
-def acp_ajax_request(session, post_data):
-    """Creates AJAX request with ACP website to return requested data"""
-    response = session.post(
-        url = "https://pharmacists.ab.ca/views/ajax",
-        data = post_data,
-        headers = {
-            'Referer': 'https://pharmacists.ab.ca'
-        }
-    )
-    
-    # Returns the data in JSON format
-    json_response = json.loads(response.text)
-    json_response = json_response[1]['data']
-    #json_response = json_response.encode('utf8')
-    
-    # Extracts out just the table rows containing data
-    soup = BeautifulSoup(json_response, 'lxml')
-    rows = soup.select("table.table-striped tbody tr")
-    
-    return rows
-
 class PharmacistData(object):
     """Takes a row of pharmacist table data and converts to object"""
     pharmacist = ""
@@ -157,8 +77,8 @@ class PharmacistData(object):
     phone = ""
     fax = ""
     registration = ""
-    apa = ""
-    inject = ""
+    apa = 0
+    inject = 0
     restrictions = ""
 
     def __init__(self, row):
@@ -243,57 +163,9 @@ class PharmacistData(object):
         self.phone = phone
         self.fax = fax
         self.registration = registration
-        self.apa
+        self.apa = apa
         self.inject = inject
         self.restrictions = restrictions
-
-def request_pharmacist_data(ses, conf, crawlDelay):
-    """Requests pharmacist data from the ACP website"""
-    data = []
-
-    log.info("STARTING PHARMACIST DATA EXTRACTION")
-
-    i = int(conf.get("rx_list", "pharmacist_start"))
-    stopNum = int(conf.get("rx_list", "request_end"))
-    stop = 0
-
-    # Loop until 5 blank requests (signalling data end or repeated errors)
-    while stop < 1:
-	    # Pause request to comply with robots.txt crawl-delay
-        time.sleep(crawlDelay)
-
-        # Create POST data for retrieving pharmacist information
-        post_data = {
-	        "view_name": "_acp_advance_filter",
-	        "view_display_id": "block_3",
-	        "page": ("0,0,0,0,0,0,%s" % i)
-        }
-
-	    # Processes AJAX response and retrieve response
-        try:
-            log.debug("Requesting page %s" % i)
-
-            page_data = acp_ajax_request(ses, post_data)
-        except Exception as e:
-            log.warn("Error with request for page %s: %s" % (i, e))
-            page_data = []
-        
-        # Checks if there is data in request; if not, increment stop counter
-        if not page_data:
-            stop = stop + 1
-
-        # Process AJAX request into a python list
-        for row in page_data:
-            try:
-                data.append(PharmacistData(row))
-            except Exception as e:
-                log.warn("Error processing page %s request: %s" % (i, e))
-
-        i = i + 1
-    
-    log.info("PHARMACIST DATA EXTRACTION COMPLETE")
-
-    return data
 
 class PharmacyData(object):
     pharmacy = ""
@@ -367,6 +239,134 @@ class PharmacyData(object):
         self.postal = postal
         self.phone = phone
         self.fax = fax
+
+def get_today():
+    """Returns todays date"""
+    today = datetime.date.today()
+    year = today.year
+    month = "%02d" % today.month
+    day = "%02d" % today.day
+    date = "%s-%s-%s" % (year, month, day)
+
+    return date
+
+def set_log_properties(conf):
+    """Sets up logging settings and returns logger"""
+    logDebug = True if conf.get("rx_list", "log_debug") == "True" else False
+    
+    if logDebug:
+        logging.config.fileConfig("logger_debug.cfg")
+    else:
+        logging.config.fileConfig("logger.cfg")
+
+    log = logging.getLogger(__name__)
+    
+    return log
+
+def get_permission(agent):
+    """Checks the specified robot.txt file for access permission."""
+    class Crawl:
+        """Class to contain robot parser output"""
+        can = False
+        delay = 0
+
+        def __init__(self, can, delay):
+            self.can = can
+            self.delay = delay
+    
+    txtUrl = "https://pharmacists.ab.ca/robots.txt"
+    reqUrl = "https://pharmacists.ab.ca/views/"
+
+    robot = robotparser.RobotFileParser()
+    robot.set_url(txtUrl)
+    robot.read()
+
+    can_crawl = robot.can_fetch(agent, reqUrl)
+    crawl_delay = 10
+
+    return Crawl(can_crawl, crawl_delay)
+
+def generate_session(user):
+    """Create session with pharmacists.ab.ca"""
+    url = "https://pharmacists.ab.ca"
+
+    try:
+        session = Session()
+        session.head(url, headers={"user-agent": user})
+    except Exception as e:
+        log.critical(e)
+        session = None
+        
+    return session
+
+def acp_ajax_request(session, post_data):
+    """Creates AJAX request with ACP website to return requested data"""
+    response = session.post(
+        url = "https://pharmacists.ab.ca/views/ajax",
+        data = post_data,
+        headers = {
+            'Referer': 'https://pharmacists.ab.ca'
+        }
+    )
+    
+    # Returns the data in JSON format
+    json_response = json.loads(response.text)
+    json_response = json_response[1]['data']
+    #json_response = json_response.encode('utf8')
+    
+    # Extracts out just the table rows containing data
+    soup = BeautifulSoup(json_response, 'lxml')
+    rows = soup.select("table.table-striped tbody tr")
+    
+    return rows
+
+def request_pharmacist_data(ses, conf, crawlDelay):
+    """Requests pharmacist data from the ACP website"""
+    data = []
+
+    log.info("STARTING PHARMACIST DATA EXTRACTION")
+
+    i = int(conf.get("rx_list", "pharmacist_start"))
+    stopNum = int(conf.get("rx_list", "request_end"))
+    stop = 0
+
+    # Loop until 5 blank requests (signalling data end or repeated errors)
+    while stop < 1:
+	    # Pause request to comply with robots.txt crawl-delay
+        time.sleep(crawlDelay)
+
+        # Create POST data for retrieving pharmacist information
+        post_data = {
+	        "view_name": "_acp_advance_filter",
+	        "view_display_id": "block_3",
+	        "page": ("0,0,0,0,0,0,%s" % i)
+        }
+
+	    # Processes AJAX response and retrieve response
+        try:
+            log.debug("Requesting page %s" % i)
+
+            page_data = acp_ajax_request(ses, post_data)
+        except Exception as e:
+            log.warn("Error with request for page %s: %s" % (i, e))
+            page_data = []
+        
+        # Checks if there is data in request; if not, increment stop counter
+        if not page_data:
+            stop = stop + 1
+
+        # Process AJAX request into a python list
+        for row in page_data:
+            try:
+                data.append(PharmacistData(row))
+            except Exception as e:
+                log.warn("Error processing page %s request: %s" % (i, e))
+
+        i = i + 1
+    
+    log.info("PHARMACIST DATA EXTRACTION COMPLETE")
+
+    return data
 
 def request_pharmacy_data(ses, conf, crawlDelay):
     data = []

@@ -4,7 +4,7 @@ from unipath import Path
 
 class NewFileHandler(logging.FileHandler):
     """Update FileHandler to name logs the current date"""
-    def __init__(self, path, mode = 'a'):
+    def __init__(self, filepath, mode):
         # Get todays date
         today = datetime.date.today()
         year = today.year
@@ -13,5 +13,6 @@ class NewFileHandler(logging.FileHandler):
         date = "%s-%s-%s" % (year, month, day)
 
         # Takes the provided path and appends the date as the log name
-        filename = Path(path, "%s.log" % date).absolute()
+        filename = Path(filepath, "%s.log" % date).absolute()
+
         super(NewFileHandler,self).__init__(filename, mode)
