@@ -82,9 +82,9 @@ def set_log_properties(conf):
     logDebug = True if conf.get("rx_list", "log_debug") == "True" else False
     
     if logDebug:
-        logging.config.fileConfig("logger.cfg")
-    else:
         logging.config.fileConfig("logger_debug.cfg")
+    else:
+        logging.config.fileConfig("logger.cfg")
 
     log = logging.getLogger(__name__)
     
@@ -147,7 +147,7 @@ def acp_ajax_request(session, post_data):
     
     return rows
 
-class PharmacistData:
+class PharmacistData(object):
     """Takes a row of pharmacist table data and converts to object"""
     pharmacist = ""
     pharmacy = ""
@@ -247,25 +247,6 @@ class PharmacistData:
         self.inject = inject
         self.restrictions = restrictions
 
-        return {
-            "date": today,
-            "pharmacist": pharmacist,
-            "pharmacy": pharmacy,
-            "address": address,
-            "city": city,
-            "postal": postal,
-            "phone": phone,
-            "fax": fax,
-            "registration": registration,
-            "apa": apa,
-            "inject": inject,
-            "restrictions": restrictions
-        }
-
-
-def extract_pharmacist_data(row):
-    """Extracts pharmacist details from the table row"""
-    
 def request_pharmacist_data(ses, conf, crawlDelay):
     """Requests pharmacist data from the ACP website"""
     data = []
@@ -304,7 +285,7 @@ def request_pharmacist_data(ses, conf, crawlDelay):
         # Process AJAX request into a python list
         for row in page_data:
             try:
-                data.append(extract_pharmacist_data(row))
+                data.append(PharmacistData(row))
             except Exception as e:
                 log.warn("Error processing page %s request: %s" % (i, e))
 
@@ -314,77 +295,78 @@ def request_pharmacist_data(ses, conf, crawlDelay):
 
     return data
 
-def extract_pharmacy_data(row):
-    """Extracts pharmacy details from the table row"""
-    # Data is contained within the table cells
-    cells = row.find_all("td")
+class PharmacyData(object):
+    pharmacy = ""
+    manager = ""
+    address = ""
+    city = ""
+    postal = ""
+    phone = ""
+    fax = ""
 
-    # Pharmacy Name
-    pharmacy = cells[0].renderContents().strip().decode("UTF-8")
-    pharmacy = html.unescape(pharmacy)
+    def __init__(self, row):
+        """Extracts pharmacy details from the table row"""
+        # Data is contained within the table cells
+        cells = row.find_all("td")
 
-    # Manager
-    manager = cells[1].renderContents().strip().decode("UTF-8")
+        # Pharmacy Name
+        pharmacy = cells[0].renderContents().strip().decode("UTF-8")
+        pharmacy = html.unescape(pharmacy)
 
-    # Location, Phone, Fax are all in one cell
-    location_contact = []
+        # Manager
+        manager = cells[1].renderContents().strip().decode("UTF-8")
 
-    # Convert cell into individual lines
-    for line in cells[2].strings:
-        location_contact.append(line.strip())
+        # Location, Phone, Fax are all in one cell
+        location_contact = []
 
-    # Attempt to split details out of first line
-    try:
-        tempAddress = html.unescape(location_contact[0].strip())
+        # Convert cell into individual lines
+        for line in cells[2].strings:
+            location_contact.append(line.strip())
 
-        # Postal Code is the last content after the final comma
-        comma_pos = tempAddress.rfind(",")
-        postal = tempAddress[comma_pos + 2:]
-        tempAddress = tempAddress[0:comma_pos].strip()
+        # Attempt to split details out of first line
+        try:
+            tempAddress = html.unescape(location_contact[0].strip())
 
-        # City is now the last content after the final comma
-        comma_pos = tempAddress.rfind(",")
-        city = tempAddress[comma_pos + 2:]
+            # Postal Code is the last content after the final comma
+            comma_pos = tempAddress.rfind(",")
+            postal = tempAddress[comma_pos + 2:]
+            tempAddress = tempAddress[0:comma_pos].strip()
 
-        # City is the remaining information
-        address = tempAddress[0:comma_pos]
-    except:
-        # Failed to split properly, dump contents into address
-        address = location_contact[0].strip()
-        city = ""
-        postal = ""
+            # City is now the last content after the final comma
+            comma_pos = tempAddress.rfind(",")
+            city = tempAddress[comma_pos + 2:]
+
+            # City is the remaining information
+            address = tempAddress[0:comma_pos]
+        except:
+            # Failed to split properly, dump contents into address
+            address = location_contact[0].strip()
         
-        # Log issue
-        log.warn("Unable to parse address for %s" % pharmacy)
+            # Log issue
+            log.warn("Unable to parse address for %s" % pharmacy)
 
-    # Phone is typically the sixth entry
-    try:
-        phone = location_contact[5].strip()
-    except:
-        phone = ""
+        # Phone is typically the sixth entry
+        try:
+            phone = location_contact[5].strip()
+        except:
+            # Log issue
+            log.warn("Unable to parse phone for %s" % pharmacy)
 
-        # Log issue
-        log.warn("Unable to parse phone for %s" % pharmacy)
+        # Fax is typically ninth entry
+        try:
+            fax = location_contact[8].strip()
+        except:
+            # Log issue
+            log.warn("Unable to parse fax for %s" % pharmacy)
 
-    # Fax is typically ninth entry
-    try:
-        fax = location_contact[8].strip()
-    except:
-        fax = ""
-
-        # Log issue
-        log.warn("Unable to parse fax for %s" % pharmacy)
-
-    return {
-        "date": today,
-        "pharmacy": pharmacy,
-        "manager": manager,
-        "address": address,
-        "city": city,
-        "postal": postal,
-        "phone": phone,
-        "fax": fax
-    }
+        self.date = today
+        self.pharmacy = pharmacy
+        self.manager = manager
+        self.address = address
+        self.city = city
+        self.postal = postal
+        self.phone = phone
+        self.fax = fax
 
 def request_pharmacy_data(ses, conf, crawlDelay):
     data = []
@@ -423,7 +405,7 @@ def request_pharmacy_data(ses, conf, crawlDelay):
         # Process AJAX request into a python list
         for row in page_data:
             try:
-                data.append(extract_pharmacy_data(row))
+                data.append(PharmacyData(row))
             except Exception as e:
                 log.warn("Error processing page %s request: %s" % (i, e))
 
@@ -451,19 +433,19 @@ def save_data(config, pharmacist, pharmacy):
                 quoting=csv.QUOTE_ALL
             )
             
-            for row in pharmacist:
+            for p in pharmacist:
                 csvFile.writerow([
-                    row["pharmacist"],
-                    row["pharmacy"],
-                    row["address"],
-                    row["city"],
-                    row["postal"],
-                    row["phone"],
-                    row["fax"],
-                    row["registration"],
-                    row["apa"],
-                    row["inject"],
-                    row["restrictions"]
+                    p.pharmacist,
+                    p.pharmacy,
+                    p.address,
+                    p.city,
+                    p.postal,
+                    p.phone,
+                    p.fax,
+                    p.registration,
+                    p.apa,
+                    p.inject,
+                    p.restrictions
                 ])
 
             log.info("Pharmacist data written to %s" % pharmacistLoc)
@@ -483,15 +465,15 @@ def save_data(config, pharmacist, pharmacy):
                 quoting=csv.QUOTE_ALL
             )
             
-            for row in pharmacy:
+            for p in pharmacy:
                 csvFile.writerow([
-                     row["pharmacy"],
-                     row["manager"],
-                     row["address"],
-                     row["city"],
-                     row["postal"],
-                     row["phone"],
-                     row["fax"]
+                     p.pharmacy,
+                     p.manager,
+                     p.address,
+                     p.city,
+                     p.postal,
+                     p.phone,
+                     p.fax
                 ])
             
             log.info("Pharmacy data written to %s" % pharmacyLoc)
@@ -505,7 +487,7 @@ def upload_data(root, pharmacist, pharmacy):
     
     config = configparser.ConfigParser()
     config.read(cLoc)
-
+    log.debug(cLoc)
     db = config.get("rx_list", "db")
     host = config.get("rx_list", "host")
     user = config.get("rx_list", "user")
@@ -538,20 +520,20 @@ def upload_data(root, pharmacist, pharmacy):
     # Convert pharmacist data to list of list
     data = []
 
-    for row in pharmacist:
+    for p in pharmacist:
         data.append((
-            row["date"],
-            row["pharmacist"],
-            row["pharmacy"],
-            row["address"],
-            row["city"],
-            row["postal"],
-            row["phone"],
-            row["fax"],
-            row["registration"],
-            row["apa"],
-            row["inject"],
-            row["restrictions"]
+            p.date,
+            p.pharmacist,
+            p.pharmacy,
+            p.address,
+            p.city,
+            p.postal,
+            p.phone,
+            p.fax,
+            p.registration,
+            p.apa,
+            p.inject,
+            p.restrictions
         ))
 
     query1 = "INSERT INTO %s " % tablePharmacist
@@ -577,16 +559,16 @@ def upload_data(root, pharmacist, pharmacy):
     # Convert pharmacist data to list of list
     data = []
 
-    for row in pharmacy:
+    for p in pharmacy:
         data.append((
-            row["date"],
-            row["pharmacy"],
-            row["manager"],
-            row["address"],
-            row["city"],
-            row["postal"],
-            row["phone"],
-            row["fax"]
+            p.date,
+            p.pharmacy,
+            p.manager,
+            p.address,
+            p.city,
+            p.postal,
+            p.phone,
+            p.fax
         ))
 
     query1 = "INSERT INTO %s " % tablePharmacy
