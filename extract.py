@@ -51,6 +51,7 @@
         e.g. def foo(bar=1):
 """
 
+import sys
 from unipath import Path
 import configparser
 import logging.config
@@ -252,9 +253,11 @@ def set_log_properties(conf):
     logDebug = True if conf.get("rx_list", "log_debug") == "True" else False
     
     if logDebug:
-        logging.config.fileConfig("logger_debug.cfg")
+        configPath = root.child("logger_debug.cfg")
     else:
-        logging.config.fileConfig("logger.cfg")
+        configPath = root.child("logger.cfg")
+    
+    logging.config.fileConfig(configPath)
 
     log = logging.getLogger(__name__)
     
@@ -585,13 +588,15 @@ def upload_data(root, pharmacist, pharmacy):
 
 
 # SET UP VARIABLES
+# Get directory to main config files
+root = Path(sys.argv[1])
+
 # Get the current date
 today = get_today()
 
 # Get the public config file and set the root directory
 config = configparser.ConfigParser()
-config.read("config.cfg")
-root = Path(config.get("rx_list", "root"))
+config.read(root.child("config.cfg").absolute())
 
 # Set up logging functions
 log = set_log_properties(config)
