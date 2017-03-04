@@ -69,17 +69,6 @@ import pymysql
 
 class PharmacistData(object):
     """Takes a row of pharmacist table data and converts to object"""
-    pharmacist = ""
-    pharmacy = ""
-    address = ""
-    city = ""
-    postal = ""
-    phone = ""
-    fax = ""
-    registration = ""
-    apa = 0
-    inject = 0
-    restrictions = ""
 
     def __init__(self, row):
         # Data is contained within the table cells
@@ -94,12 +83,22 @@ class PharmacistData(object):
         for line in cells[1].strings:
             location.append(line.strip())
 
+        # Extract Pharmacy
+        pharmacy = ""
+
         try:
             pharmacy = html.unescape(location[0])
-        except:
-            log.warn("Unable to identify pharmacy for %s" % pharmacist)
+        except Exception:
+            msg = "Exception identifying pharmacy for %s" % pharmacist
+            log.exception(msg)
     
-    
+        # Extract Address, City, Postal Code, Phone and Fax
+        address = ""
+        city = ""
+        postal = ""
+        phone = ""
+        fax = ""
+
         if pharmacy:
             try:
                 tempAddress = html.unescape(location[1].strip())
@@ -122,18 +121,18 @@ class PharmacistData(object):
 
                     # Log issue
                     log.warn("Unable to parse address for %s" % pharmacist)
-            except:
-                log.warn("Unable to find address for %s" % pharmacist)
+            except Exception:
+                log.exception("Unable to find address for %s" % pharmacist)
         
             try:
                 phone = re.sub(r"\D", "", location[3])
-            except:
-                log.warn("Unable to identify phone for %s" % pharmacist)
+            except Exception:
+                log.exception("Unable to identify phone for %s" % pharmacist)
 
             try:
                 fax = re.sub(r"\D", "", location[4])
-            except:
-                log.warn("Unable to identify fax for %s" % pharmacist)
+            except Exception:
+                log.exception("Unable to identify fax for %s" % pharmacist)
 
         # Registration Status
         registration = cells[2].renderContents().strip().decode("UTF-8")
@@ -210,26 +209,24 @@ class PharmacyData(object):
 
             # City is the remaining information
             address = tempAddress[0:comma_pos]
-        except:
+        except Exception:
             # Failed to split properly, dump contents into address
             address = location_contact[0].strip()
         
             # Log issue
-            log.warn("Unable to parse address for %s" % pharmacy)
+            log.exception("Unable to parse address for %s" % pharmacy)
 
         # Phone is typically the sixth entry
         try:
             phone = location_contact[5].strip()
-        except:
-            # Log issue
-            log.warn("Unable to parse phone for %s" % pharmacy)
+        except Exception:
+            log.exception("Unable to parse phone for %s" % pharmacy)
 
         # Fax is typically ninth entry
         try:
             fax = location_contact[8].strip()
-        except:
-            # Log issue
-            log.warn("Unable to parse fax for %s" % pharmacy)
+        except Exception:
+            log.exception("Unable to parse fax for %s" % pharmacy)
 
         self.date = today
         self.pharmacy = pharmacy
@@ -294,7 +291,7 @@ def generate_session(user):
         session = Session()
         session.head(url, headers={"user-agent": user})
     except Exception as e:
-        log.critical(e)
+        log.exception(e)
         session = None
         
     return session
@@ -347,8 +344,8 @@ def request_pharmacist_data(ses, conf, crawlDelay):
             log.debug("Requesting page %s" % i)
 
             page_data = acp_ajax_request(ses, post_data)
-        except Exception as e:
-            log.warn("Error with request for page %s: %s" % (i, e))
+        except Exception:
+            log.exception("Error with request for page %s" % i)
             page_data = []
         
         # Checks if there is data in request; if not, increment stop counter
@@ -359,8 +356,8 @@ def request_pharmacist_data(ses, conf, crawlDelay):
         for row in page_data:
             try:
                 data.append(PharmacistData(row))
-            except Exception as e:
-                log.warn("Error processing page %s request: %s" % (i, e))
+            except Exception:
+                log.exception("Error processing page %s request" % i)
 
         i = i + 1
     
@@ -394,8 +391,8 @@ def request_pharmacy_data(ses, conf, crawlDelay):
             log.debug("Requesting page %s" % i)
 
             page_data = acp_ajax_request(ses, post_data)
-        except Exception as e:
-            log.warn("Error with request for page %s: %s" % (i, e))
+        except Exception:
+            log.exception("Error with request for page %s" % i)
             page_data = []
         
         # Checks if there is data in request; if not, increment stop counter
@@ -406,8 +403,8 @@ def request_pharmacy_data(ses, conf, crawlDelay):
         for row in page_data:
             try:
                 data.append(PharmacyData(row))
-            except Exception as e:
-                log.warn("Error processing page %s request: %s" % (i, e))
+            except Exception:
+                log.exception("Error processing page %s request" % i)
 
         i = i + 1
     
@@ -449,10 +446,9 @@ def save_data(config, pharmacist, pharmacy):
                 ])
 
             log.info("Pharmacist data written to %s" % pharmacistLoc)
-    except Exception as e:
-        log.warn(
-            "Error writing pharmacist data to %s: %s" % (pharmacistLoc, e)
-        )
+    except Exception:
+        msg = "Error writing pharmacist data to %s" % pharmacistLoc
+        log.exception(msg)
 
     # Write Pharmacy File as CSV
     try:
@@ -477,8 +473,9 @@ def save_data(config, pharmacist, pharmacy):
                 ])
             
             log.info("Pharmacy data written to %s" % pharmacyLoc)
-    except Exception as e:
-        log.warn("Error writing pharmacy data to %s: %s" % (pharmacyLoc, e))
+    except Exception:
+        msg = "Error writing pharmacy data to %s" % pharmacyLoc
+        log.exception(msg)
 
 def upload_data(root, pharmacist, pharmacy):
     """Upload data to MySQL Database"""
@@ -509,8 +506,8 @@ def upload_data(root, pharmacist, pharmacy):
         
         log.info("Successfully connected to database")
 
-    except Exception as e:
-        log.critical("Unable to connected to database %s: %s" % (db, e))
+    except Exception:
+        log.exception("Unable to connected to database %s" % db)
 
     cursor = conn.cursor()
     
@@ -547,11 +544,9 @@ def upload_data(root, pharmacist, pharmacy):
     try:
         cursor.executemany(query, data)
         log.info("Pharmacist data upload complete!")
-    except Exception as e:
-        log.critical(
-            "Unable to upload pharmacist data to table %s: %s" % 
-            (tablePharmacist, e)
-        )
+    except Exception:
+        msg = "Unable to upload pharmacist data to table %s" % tablePharmacist
+        log.exception(msg)
 
     # Upload data to pharmacy table
     log.info("Uploading pharmacy data to %s" % tablePharmacy)
@@ -582,11 +577,10 @@ def upload_data(root, pharmacist, pharmacy):
         cursor.executemany(query, data)
     
         log.info("Pharmacy data upload complete!")
-    except Exception as e:
-        log.critical(
-            "Unable to upload pharmacy data to table %s: %s" % 
-            (tablePharmacy, e)
-        )
+    except Exception:
+        msg = "Unable to upload pharmacy data to table %s" % tablePharmacy
+        log.critical(msg)
+
     conn.close()
 
 
